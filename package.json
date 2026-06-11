@@ -1,0 +1,43 @@
+{
+  "name": "opencode-token-menubar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "macOS menubar dashboard for OpenCode token metrics",
+  "main": "dist/main/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build:renderer": "vite build",
+    "build:main": "tsc -p tsconfig.json",
+    "build": "bun run build:renderer && bun run build:main",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "electron .",
+    "dev:app": "bun run build:main && ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron ."
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "better-sqlite3": "latest",
+    "chokidar": "latest",
+    "electron": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "recharts": "latest"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  },
+  "build": {
+    "appId": "ai.opencode.token-menubar",
+    "productName": "OpenCode Token Menubar",
+    "mac": {
+      "category": "public.app-category.developer-tools"
+    }
+  }
+}

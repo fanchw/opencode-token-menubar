@@ -1,0 +1,15 @@
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite"
+
+export default defineConfig({
+  plugins: [react()],
+  root: ".",
+  build: {
+    outDir: "dist/renderer",
+    emptyOutDir: false,
+  },
+  test: {
+    globals: true,
+    environment: "node",
+  },
+})
