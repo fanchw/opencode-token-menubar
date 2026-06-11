@@ -104,4 +104,10 @@ describe("normalizeMetricEvent", () => {
 
     expect(event?.timestamp).toBe("2026-06-11T13:00:00.000Z");
   });
+
+  test("normalizes offset-less timestamps to ISO UTC strings", () => {
+    const event = normalizeMetricEvent({ id: "req-7", timestamp: "2026-06-11T10:00:00" });
+
+    expect(event?.timestamp).toBe(new Date("2026-06-11T10:00:00").toISOString());
+  });
 });

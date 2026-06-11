@@ -32,33 +32,27 @@ export interface TodaySummary {
   averageTokensPerSecond: number;
 }
 
-export interface RecentRequest {
-  id: string;
-  timestamp: string;
-  provider: string;
-  model: string;
-  totalTokens: number;
-  durationMs: number;
-}
-
 export interface ModelRankingRow {
   provider: string;
   model: string;
   requestCount: number;
   totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  averageTokensPerSecond: number;
 }
 
 export interface HourlyTrendRow {
   hour: string;
-  requestCount: number;
   totalTokens: number;
+  averageTokensPerSecond: number;
 }
 
 export interface DashboardData {
-  todaySummary: TodaySummary;
-  recentRequests: RecentRequest[];
+  today: TodaySummary;
+  recent: MetricEvent[];
   modelRanking: ModelRankingRow[];
-  hourlyTrend: HourlyTrendRow[];
+  hourlyTrends: HourlyTrendRow[];
 }
 
 function normalizeTokenCount(value: NumericValue): number {
@@ -74,7 +68,9 @@ function normalizeRate(value: NumericValue): number | null {
 }
 
 function normalizeTimestamp(value: string | null | undefined): string {
-  return value && !Number.isNaN(Date.parse(value)) ? value : new Date().toISOString();
+  const timestamp = value ? new Date(value) : new Date();
+
+  return Number.isNaN(timestamp.getTime()) ? new Date().toISOString() : timestamp.toISOString();
 }
 
 export function normalizeMetricEvent(raw: RawMetricEvent): MetricEvent | null {
