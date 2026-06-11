@@ -53,6 +53,24 @@ export interface DashboardData {
   recent: MetricEvent[];
   modelRanking: ModelRankingRow[];
   hourlyTrends: HourlyTrendRow[];
+  importErrors?: number;
+  pluginInstalled?: boolean;
+  paths?: {
+    jsonlPath: string;
+    sqlitePath: string;
+    pluginPath: string;
+  };
+}
+
+export interface TokenMetricsApi {
+  getDashboardData(): Promise<DashboardData>;
+  installPlugin(): Promise<{ installed: true; targetPath: string }>;
+}
+
+declare global {
+  interface Window {
+    tokenMetrics: TokenMetricsApi;
+  }
 }
 
 function normalizeTokenCount(value: NumericValue): number {
