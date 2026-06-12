@@ -309,6 +309,7 @@ h2 {
 .chip,
 .option-chip,
 .timezone-select select,
+.custom-range-field input,
 .multi-select-search,
 .multi-select-header button {
   border: 1px solid rgba(100, 116, 139, 0.38);
@@ -340,6 +341,7 @@ h2 {
 }
 
 .timezone-select select,
+.custom-range-field input,
 .multi-select-search {
   width: 100%;
   min-height: 32px;
@@ -349,6 +351,24 @@ h2 {
 
 .timezone-select select {
   background: #07101d;
+}
+
+.custom-range-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.custom-range-field input {
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.filter-error {
+  margin: 0;
+  color: #fca5a5;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
 }
 
 .multi-select-search {
@@ -381,6 +401,12 @@ h2 {
   background: rgba(20, 184, 166, 0.14);
 }
 
+.option-chip.missing {
+  border-style: dashed;
+  color: #fbbf24;
+  background: rgba(120, 53, 15, 0.14);
+}
+
 .multi-select {
   display: grid;
   gap: 6px;
@@ -391,6 +417,7 @@ h2 {
 }
 
 .timezone-select select:focus,
+.custom-range-field input:focus,
 .multi-select-search:focus,
 .multi-select-header button:focus-visible,
 .chip:focus-visible,
@@ -439,6 +466,7 @@ h2 {
   }
 
   .summary-grid,
+  .custom-range-grid,
   .content-grid {
     grid-template-columns: 1fr;
   }

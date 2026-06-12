@@ -8,6 +8,7 @@ import { startIngestServer, type IngestServerHandle } from "./ingestServer.js"
 import { MetricsStore } from "./metricsStore.js"
 import { resolveAppPaths, type AppPaths } from "./paths.js"
 import { installPlugin } from "./pluginInstaller.js"
+import { formatTokenUnit } from "../shared/metrics.js"
 import type { DashboardData, DashboardFilters, MetricEvent } from "../shared/metrics.js"
 
 let tray: Tray | null = null
@@ -142,9 +143,9 @@ function updateTrayTitle() {
   const data = getDashboardData()
   const recentSpeed = data.recent[0]?.tokensPerSecond
   if (typeof recentSpeed === "number" && recentSpeed > 0) {
-    tray.setTitle(`OC ${Math.round(recentSpeed)} tok/s`)
+    tray.setTitle(`OC ${Math.round(recentSpeed)}/s`)
   } else if (data.today.totalTokens > 0) {
-    tray.setTitle(`OC ${Math.round(data.today.totalTokens / 100) / 10}K tok`)
+    tray.setTitle(`OC ${formatTokenUnit(data.today.totalTokens)}`)
   } else {
     tray.setTitle("OC")
   }

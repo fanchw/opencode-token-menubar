@@ -11,7 +11,7 @@ import {
 
 import type { DashboardData, DashboardFilters, FilterOption } from "../shared/metrics.js"
 import { formatTokenUnit } from "../shared/metrics.js"
-import { formatTimeInZone, resolveQuickRange } from "./timeFilters.js"
+import { formatTimeInZone, resolveQuickRange, validateCustomRange } from "./timeFilters.js"
 import type { QuickRange, TimezoneMode } from "./timeFilters.js"
 
 const debounceMs = 120
@@ -28,6 +28,13 @@ const quickRanges: Array<{ label: string; value: QuickRange }> = [
   { label: "30d", value: "30d" },
 ]
 
+function toDateTimeLocalValue(timestamp: string): string {
+  const date = new Date(timestamp)
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000
+
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
+}
+
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(Number.isFinite(value) ? Math.round(value) : 0)
 }
@@ -42,6 +49,8 @@ export default function App() {
   const [isInstalling, setIsInstalling] = useState(false)
   const [quickRange, setQuickRange] = useState<QuickRange>("today")
   const [timezone, setTimezone] = useState<TimezoneMode>("local")
+  const [customRange, setCustomRange] = useState<{ start: string; end: string } | null>(null)
+  const [customRangeError, setCustomRangeError] = useState<string | null>(null)
   const [selectedProviders, setSelectedProviders] = useState<string[]>([])
   const [selectedModels, setSelectedModels] = useState<string[]>([])
   const [providerSearch, setProviderSearch] = useState("")
@@ -53,14 +62,14 @@ export default function App() {
   const debounceTimerRef = useRef<number | null>(null)
 
   const filters = useMemo<DashboardFilters>(() => {
-    const range = resolveQuickRange(quickRange, new Date(), timezone)
+    const range = customRange ?? resolveQuickRange(quickRange, new Date(), timezone)
 
     return {
       ...range,
       ...(selectedProviders.length ? { providers: selectedProviders } : {}),
       ...(selectedModels.length ? { models: selectedModels } : {}),
     }
-  }, [quickRange, selectedModels, selectedProviders, timezone])
+  }, [customRange, quickRange, selectedModels, selectedProviders, timezone])
 
   const refreshDashboard = useCallback(async (nextFilters: DashboardFilters, options: { force?: boolean } = {}) => {
     if (!mountedRef.current || inFlightRef.current || (isInstallingRef.current && !options.force)) {
@@ -84,16 +93,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    latestFiltersRef.current = filters
-    void refreshDashboard(filters)
-  }, [filters, refreshDashboard])
-
-  useEffect(() => {
     mountedRef.current = true
-    const nextFilters = latestFiltersRef.current
-    if (nextFilters) {
-      void refreshDashboard(nextFilters)
-    }
     const unsubscribe = window.tokenMetrics.onDashboardUpdated(() => {
       if (debounceTimerRef.current !== null) {
         window.clearTimeout(debounceTimerRef.current)
@@ -115,6 +115,28 @@ export default function App() {
       unsubscribe()
     }
   }, [refreshDashboard])
+
+  useEffect(() => {
+    latestFiltersRef.current = filters
+    void refreshDashboard(filters)
+  }, [filters, refreshDashboard])
+
+  function applyQuickRange(range: QuickRange) {
+    setQuickRange(range)
+    setCustomRange(null)
+    setCustomRangeError(null)
+  }
+
+  function updateCustomRange(nextRange: { start: string; end: string }) {
+    const validation = validateCustomRange(nextRange.start, nextRange.end)
+    if (!validation.valid) {
+      setCustomRangeError(validation.message)
+      return
+    }
+
+    setCustomRangeError(null)
+    setCustomRange({ start: validation.start, end: validation.end })
+  }
 
   async function handleInstallPlugin() {
     setIsInstalling(true)
@@ -140,6 +162,8 @@ export default function App() {
 
   const today = dashboard?.today
   const hasMetrics = Boolean(today?.requestCount)
+  const rangeStartValue = toDateTimeLocalValue(filters.start)
+  const rangeEndValue = toDateTimeLocalValue(filters.end)
   const chartData = dashboard?.hourlyTrends.map((row) => ({
     ...row,
     label: formatTimeInZone(row.hour, timezone, { hour: "2-digit" }),
@@ -171,7 +195,7 @@ export default function App() {
               <button
                 className={range.value === quickRange ? "chip active" : "chip"}
                 key={range.value}
-                onClick={() => setQuickRange(range.value)}
+                onClick={() => applyQuickRange(range.value)}
                 type="button"
               >
                 {range.label}
@@ -186,6 +210,25 @@ export default function App() {
             <option value="utc">UTC</option>
           </select>
         </label>
+        <div className="custom-range-grid">
+          <label className="filter-group custom-range-field">
+            <span>Start</span>
+            <input
+              type="datetime-local"
+              value={rangeStartValue}
+              onChange={(event) => updateCustomRange({ start: event.target.value, end: rangeEndValue })}
+            />
+          </label>
+          <label className="filter-group custom-range-field">
+            <span>End</span>
+            <input
+              type="datetime-local"
+              value={rangeEndValue}
+              onChange={(event) => updateCustomRange({ start: rangeStartValue, end: event.target.value })}
+            />
+          </label>
+        </div>
+        {customRangeError ? <p className="filter-error">{customRangeError}</p> : null}
         <MultiSelect
           label="Providers"
           options={dashboard?.providers ?? []}
@@ -357,7 +400,7 @@ export default function App() {
         <p className="restart-hint">Restart OpenCode after installing or reinstalling the plugin.</p>
       </section>
 
-      {dashboard && !hasMetrics ? null : <span className="sr-only">Dashboard loaded</span>}
+      {dashboard ? <span className="sr-only">Dashboard loaded{hasMetrics ? " with metrics" : " with no metrics"}</span> : null}
     </main>
   )
 }
@@ -380,7 +423,12 @@ function MultiSelect({
   onToggle: (value: string) => void
 }) {
   const normalizedSearch = search.trim().toLowerCase()
-  const visibleOptions = options.filter((option) => option.value.toLowerCase().includes(normalizedSearch))
+  const optionValues = new Set(options.map((option) => option.value))
+  const missingSelectedOptions = selected
+    .filter((value) => !optionValues.has(value))
+    .map((value) => ({ requestCount: 0, totalTokens: 0, value }))
+  const visibleOptions = [...missingSelectedOptions, ...options]
+    .filter((option) => option.value.toLowerCase().includes(normalizedSearch))
 
   return (
     <div className="multi-select filter-group">
@@ -401,16 +449,17 @@ function MultiSelect({
       <div className="option-chip-row">
         {visibleOptions.length ? visibleOptions.map((option) => {
           const isSelected = selected.includes(option.value)
+          const hasMatches = optionValues.has(option.value)
 
           return (
             <button
-              className={isSelected ? "option-chip active" : "option-chip"}
+              className={`${isSelected ? "option-chip active" : "option-chip"}${hasMatches ? "" : " missing"}`}
               key={option.value}
               onClick={() => onToggle(option.value)}
               type="button"
             >
               <span>{option.value}</span>
-              <small>{formatTokenUnit(option.totalTokens)}</small>
+              <small>{hasMatches ? formatTokenUnit(option.totalTokens) : "no matches"}</small>
             </button>
           )
         }) : <span className="empty-options">No options</span>}
