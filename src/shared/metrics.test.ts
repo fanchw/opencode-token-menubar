@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { normalizeMetricEvent } from "./metrics.js";
+import { formatTokenUnit, normalizeMetricEvent } from "./metrics.js";
 
 describe("normalizeMetricEvent", () => {
   afterEach(() => {
@@ -109,5 +109,20 @@ describe("normalizeMetricEvent", () => {
     const event = normalizeMetricEvent({ id: "req-7", timestamp: "2026-06-11T10:00:00" });
 
     expect(event?.timestamp).toBe(new Date("2026-06-11T10:00:00").toISOString());
+  });
+});
+
+describe("formatTokenUnit", () => {
+  test.each([
+    [0, "0"],
+    [987, "987"],
+    [1000, "1K"],
+    [12400, "12.4K"],
+    [1000000, "1M"],
+    [3250000, "3.3M"],
+    [1000000000, "1B"],
+    [1000000000000, "1T"],
+  ])("formats %i tokens as %s", (value, expected) => {
+    expect(formatTokenUnit(value)).toBe(expected);
   });
 });

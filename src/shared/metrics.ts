@@ -54,11 +54,26 @@ export interface HourlyTrendRow {
   averageTokensPerSecond: number;
 }
 
+export interface DashboardFilters {
+  start: string;
+  end: string;
+  providers?: string[];
+  models?: string[];
+}
+
+export interface FilterOption {
+  value: string;
+  requestCount: number;
+  totalTokens: number;
+}
+
 export interface DashboardData {
   today: TodaySummary;
   recent: MetricEvent[];
   modelRanking: ModelRankingRow[];
   hourlyTrends: HourlyTrendRow[];
+  providers: FilterOption[];
+  models: FilterOption[];
   importErrors?: number;
   pluginInstalled?: boolean;
   paths?: {
@@ -70,8 +85,9 @@ export interface DashboardData {
 }
 
 export interface TokenMetricsApi {
-  getDashboardData(): Promise<DashboardData>;
+  getDashboardData(filters: DashboardFilters): Promise<DashboardData>;
   installPlugin(): Promise<{ installed: true; targetPath: string }>;
+  onDashboardUpdated(callback: () => void): () => void;
 }
 
 declare global {
@@ -90,6 +106,24 @@ function normalizeDuration(value: NumericValue): number {
 
 function normalizeRate(value: NumericValue): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+export function formatTokenUnit(value: number): string {
+  const normalizedValue = typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+  const units = [
+    { suffix: "T", divisor: 1_000_000_000_000 },
+    { suffix: "B", divisor: 1_000_000_000 },
+    { suffix: "M", divisor: 1_000_000 },
+    { suffix: "K", divisor: 1_000 },
+  ];
+
+  for (const unit of units) {
+    if (normalizedValue >= unit.divisor) {
+      return `${(normalizedValue / unit.divisor).toFixed(1).replace(/\.0$/, "")}${unit.suffix}`;
+    }
+  }
+
+  return Math.floor(normalizedValue).toString();
 }
 
 function normalizeTimestamp(value: string | null | undefined): string {
