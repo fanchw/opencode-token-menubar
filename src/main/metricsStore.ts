@@ -1,7 +1,8 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-import Database from "better-sqlite3";
+import sqlite from "node-sqlite3-wasm";
+import type { BindValues } from "node-sqlite3-wasm";
 
 import type { DashboardData, MetricEvent } from "../shared/metrics.js";
 
@@ -19,51 +20,79 @@ interface SummaryRow {
   averageTokensPerSecond: number | null;
 }
 
-export class MetricsStore {
-  private readonly database: Database.Database;
+interface DatabaseConnection {
+  all(sql: string, values?: BindValues): unknown[];
+  close(): void;
+  exec(sql: string): void;
+  get(sql: string, values?: BindValues): unknown;
+  run(sql: string, values?: BindValues): unknown;
+}
 
-  constructor(databasePath: string) {
+type DatabaseConstructor = new (databasePath: string) => DatabaseConnection;
+
+export class MetricsStore {
+  static readonly DatabaseConstructor: DatabaseConstructor = sqlite.Database;
+
+  private readonly database: DatabaseConnection;
+
+  constructor(databasePath: string, DatabaseCtor: DatabaseConstructor = MetricsStore.DatabaseConstructor) {
     mkdirSync(dirname(databasePath), { recursive: true });
-    this.database = new Database(databasePath);
+    this.database = new DatabaseCtor(databasePath);
     this.initializeSchema();
   }
 
   insertEvents(events: MetricEvent[]): void {
-    const insert = this.database.prepare(`
-      INSERT OR IGNORE INTO requests (
-        id,
-        timestamp,
-        provider,
-        model,
-        inputTokens,
-        outputTokens,
-        tokens,
-        duration,
-        speed
-      ) VALUES (
-        @id,
-        @timestamp,
-        @provider,
-        @model,
-        @inputTokens,
-        @outputTokens,
-        @totalTokens,
-        @durationMs,
-        @tokensPerSecond
-      )
-    `);
-    const transaction = this.database.transaction((metricEvents: MetricEvent[]) => {
-      for (const event of metricEvents) {
-        insert.run(event);
+    this.database.exec("BEGIN TRANSACTION");
+    try {
+      for (const event of events) {
+        this.database.run(
+          `
+            INSERT OR IGNORE INTO requests (
+              id,
+              timestamp,
+              provider,
+              model,
+              inputTokens,
+              outputTokens,
+              tokens,
+              duration,
+              speed
+            ) VALUES (
+              @id,
+              @timestamp,
+              @provider,
+              @model,
+              @inputTokens,
+              @outputTokens,
+              @totalTokens,
+              @durationMs,
+              @tokensPerSecond
+            )
+          `,
+          {
+            "@id": event.id,
+            "@timestamp": event.timestamp,
+            "@provider": event.provider,
+            "@model": event.model,
+            "@inputTokens": event.inputTokens,
+            "@outputTokens": event.outputTokens,
+            "@totalTokens": event.totalTokens,
+            "@durationMs": event.durationMs,
+            "@tokensPerSecond": event.tokensPerSecond,
+          },
+        );
       }
-    });
 
-    transaction(events);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   getDashboardData({ dayStart, dayEnd, recentLimit }: DashboardQuery): DashboardData {
-    const todaySummary = this.database
-      .prepare<[string, string], SummaryRow>(`
+    const todaySummary = this.database.get(
+      `
         SELECT
           COUNT(*) AS requestCount,
           COALESCE(SUM(tokens), 0) AS totalTokens,
@@ -72,8 +101,9 @@ export class MetricsStore {
           COALESCE(AVG(speed), 0) AS averageTokensPerSecond
         FROM requests
         WHERE timestamp >= ? AND timestamp < ?
-      `)
-      .get(dayStart, dayEnd) ?? {
+      `,
+      [dayStart, dayEnd],
+    ) as SummaryRow | undefined ?? {
       requestCount: 0,
       totalTokens: 0,
       inputTokens: 0,
@@ -81,8 +111,8 @@ export class MetricsStore {
       averageTokensPerSecond: 0,
     };
 
-    const recent = this.database
-      .prepare<[string, string, number], DashboardData["recent"][number]>(`
+    const recent = this.database.all(
+      `
         SELECT id,
           timestamp,
           provider,
@@ -96,11 +126,12 @@ export class MetricsStore {
         WHERE timestamp >= ? AND timestamp < ?
         ORDER BY timestamp DESC
         LIMIT ?
-      `)
-      .all(dayStart, dayEnd, recentLimit);
+      `,
+      [dayStart, dayEnd, recentLimit],
+    ) as DashboardData["recent"];
 
-    const modelRanking = this.database
-      .prepare<[string, string], DashboardData["modelRanking"][number]>(`
+    const modelRanking = this.database.all(
+      `
         SELECT provider,
           model,
           COUNT(*) AS requestCount,
@@ -112,11 +143,12 @@ export class MetricsStore {
         WHERE timestamp >= ? AND timestamp < ?
         GROUP BY provider, model
         ORDER BY totalTokens DESC, requestCount DESC, provider ASC, model ASC
-      `)
-      .all(dayStart, dayEnd);
+      `,
+      [dayStart, dayEnd],
+    ) as DashboardData["modelRanking"];
 
-    const hourlyTrends = this.database
-      .prepare<[string, string], DashboardData["hourlyTrends"][number]>(`
+    const hourlyTrends = this.database.all(
+      `
         SELECT strftime('%Y-%m-%dT%H:00:00.000Z', timestamp) AS hour,
           SUM(tokens) AS totalTokens,
           AVG(speed) AS averageTokensPerSecond
@@ -124,8 +156,9 @@ export class MetricsStore {
         WHERE timestamp >= ? AND timestamp < ?
         GROUP BY hour
         ORDER BY hour ASC
-      `)
-      .all(dayStart, dayEnd);
+      `,
+      [dayStart, dayEnd],
+    ) as DashboardData["hourlyTrends"];
 
     return {
       today: {

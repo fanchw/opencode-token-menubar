@@ -74,6 +74,21 @@ describe("MetricsStore", () => {
     return store;
   }
 
+  test("accepts an injected database constructor", () => {
+    tempDir = mkdtempSync(join(tmpdir(), "metrics-store-"));
+    const createdPaths: string[] = [];
+    const DatabaseConstructor = class extends MetricsStore.DatabaseConstructor {
+      constructor(databasePath: string) {
+        createdPaths.push(databasePath);
+        super(databasePath);
+      }
+    };
+
+    store = new MetricsStore(join(tempDir, "nested", "metrics.sqlite"), DatabaseConstructor);
+
+    expect(createdPaths).toEqual([join(tempDir, "nested", "metrics.sqlite")]);
+  });
+
   test("imports duplicate ids only once", () => {
     const metricsStore = createStore();
     metricsStore.insertEvents([baseEvents[0], baseEvents[0]]);

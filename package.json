@@ -17,15 +17,14 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "better-sqlite3": "latest",
     "chokidar": "latest",
     "electron": "latest",
+    "node-sqlite3-wasm": "^0.8.58",
     "react": "latest",
     "react-dom": "latest",
     "recharts": "latest"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "latest",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
