@@ -15,7 +15,9 @@ describe("resolveAppPaths", () => {
       ingestPath: join(homedir(), ".config", "opencode", "token-metrics", "ingest.json"),
       sqlitePath: join("/user/data", "metrics.db"),
       pluginPath: join(homedir(), ".config", "opencode", "plugins", "token-metrics.ts"),
+      pluginSharedPath: join(homedir(), ".config", "opencode", "shared", "pluginMetric.ts"),
       bundledPluginPath: join("/app/root", "plugin", "token-metrics.ts"),
+      bundledPluginSharedPath: join("/app/root", "src", "shared", "pluginMetric.ts"),
     });
   });
 });

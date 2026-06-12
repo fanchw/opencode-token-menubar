@@ -7,7 +7,9 @@ export interface AppPaths {
   ingestPath: string;
   sqlitePath: string;
   pluginPath: string;
+  pluginSharedPath: string;
   bundledPluginPath: string;
+  bundledPluginSharedPath: string;
 }
 
 export function resolveAppPaths(appPath = process.cwd(), userDataPath = process.cwd()): AppPaths {
@@ -20,6 +22,8 @@ export function resolveAppPaths(appPath = process.cwd(), userDataPath = process.
     ingestPath: join(tokenMetricsPath, "ingest.json"),
     sqlitePath: join(userDataPath, "metrics.db"),
     pluginPath: join(configPath, "plugins", "token-metrics.ts"),
+    pluginSharedPath: join(configPath, "shared", "pluginMetric.ts"),
     bundledPluginPath: join(appPath, "plugin", "token-metrics.ts"),
+    bundledPluginSharedPath: join(appPath, "src", "shared", "pluginMetric.ts"),
   };
 }
