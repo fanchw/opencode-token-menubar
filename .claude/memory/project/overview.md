@@ -6,7 +6,7 @@ OpenCode Token Menubar 是一个 macOS Electron 状态栏应用，用来展示 O
 
 | 模块 | 路径 | 职责 |
 |------|------|------|
-| OpenCode plugin | `plugin/token-metrics.ts` | 监听 OpenCode `message.updated` / `message.part.updated` 事件，计算正向 token usage delta，并追加 JSONL |
+| OpenCode plugin | `plugin/token-metrics.ts` | 监听 OpenCode `message.updated` / `message.part.updated` 事件，计算正向 token usage delta，优先 POST 本地 ingest，失败时写 JSONL |
 | Path resolver | `src/main/paths.ts` | 解析 JSONL、SQLite、global plugin、bundled plugin 路径 |
 | JSONL importer | `src/main/jsonlImporter.ts` | 按 byte offset 增量读取 JSONL，保留末尾 partial line，避免丢事件 |
 | Metrics store | `src/main/metricsStore.ts` | 使用 SQLite 存储指标并提供今日汇总、最近请求、模型排行、小时趋势 |
@@ -20,10 +20,17 @@ OpenCode Token Menubar 是一个 macOS Electron 状态栏应用，用来展示 O
 2. app 将 bundled plugin 安装到 `~/.config/opencode/plugins/token-metrics.ts`。
 3. 用户重启 OpenCode，让 global plugin 生效。
 4. plugin 监听 `message.updated` / `message.part.updated`，对同一 message/session 做 usage snapshot 差分。
-5. 有正向 token delta 时，plugin 追加一行 JSON 到 `~/.config/opencode/token-metrics/events.jsonl`。
-6. Electron main 监听 JSONL 文件变化，从持久化 offset 增量读取新行。
-7. importer 标准化事件后写入 SQLite：`~/Library/Application Support/opencode-token-menubar/metrics.db`。
-8. renderer 通过 IPC 获取 dashboard 数据，每 2 秒刷新。
+5. 有正向 token delta 时，plugin 优先 POST 到 Electron main 的 loopback ingest server。
+6. POST 失败时，plugin 追加 JSONL fallback 到 `~/.config/opencode/token-metrics/events.jsonl`。
+7. Electron main 将 ingest 事件或 JSONL fallback 导入 SQLite：`~/Library/Application Support/opencode-token-menubar/metrics.db`。
+8. renderer 当前通过 IPC 获取 dashboard 数据，每 2 秒刷新。
+
+## 待改体验问题
+
+- macOS 菜单栏状态仍然不稳定展示，需要检查 Tray 生命周期、图标/标题策略、context menu 与窗口定位。
+- Dashboard 刷新目前依赖 renderer 2 秒轮询，应改为 Electron main 在 ingest/JSONL 导入后主动推送更新事件。
+- 页面视觉偏厚重 AI 风，需要轻盈科技风，减少大面积深色渐变和重阴影，提升信息密度与层次。
+- 交互缺少 provider、model、时间等筛选维度，需要支持按来源和时间范围区分查看。
 
 ## 验证命令
 
