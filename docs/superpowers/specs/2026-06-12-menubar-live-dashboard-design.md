@@ -110,6 +110,21 @@ Relative presets are resolved in the renderer before querying IPC. Calendar pres
 - Ranking panel: top provider/model pairs with token and request totals.
 - Settings/details area: local paths and install/reinstall plugin action, visually secondary.
 
+## Token Number Formatting
+
+- Use uppercase decimal units for token counts across tray title, summary, ranking, recent rows, charts, and tooltips.
+- Unit thresholds:
+  - `K` = 1,000
+  - `M` = 1,000,000
+  - `B` = 1,000,000,000
+  - `T` = 1,000,000,000,000
+- Values below `1K` show as whole numbers, for example `987`.
+- Values from `1K` up to but not including `1M` use `K`, for example `12.4K`.
+- Values from `1M` up to but not including `1B` use `M`, for example `3.2M`.
+- Values from `1B` up to but not including `1T` use `B`.
+- Values at or above `1T` use `T`.
+- Use one decimal place when it adds signal; trim trailing `.0`.
+
 ## Error Handling
 
 - If live IPC subscription fails, keep initial fetch behavior and expose a visible error.
