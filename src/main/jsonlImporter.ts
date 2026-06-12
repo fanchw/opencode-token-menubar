@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, ftruncateSync, openSync, readSync, writeSync } from "node:fs";
 
 import { normalizeMetricEvent, type MetricEvent, type RawMetricEvent } from "../shared/metrics.js";
 
@@ -50,4 +50,29 @@ export function readJsonlEvents(filePath: string, startOffset = 0): JsonlImportR
   }
 
   return { events, errors, nextOffset: readOffset + completeLength };
+}
+
+export function compactJsonlFile(filePath: string, importedOffset: number): void {
+  if (!existsSync(filePath) || importedOffset <= 0) {
+    return;
+  }
+
+  const fileDescriptor = openSync(filePath, "r+");
+
+  try {
+    const fileSize = fstatSync(fileDescriptor).size;
+
+    if (importedOffset >= fileSize) {
+      ftruncateSync(fileDescriptor, 0);
+      return;
+    }
+
+    const remainingLength = fileSize - importedOffset;
+    const remaining = Buffer.alloc(remainingLength);
+    readSync(fileDescriptor, remaining, 0, remainingLength, importedOffset);
+    ftruncateSync(fileDescriptor, 0);
+    writeSync(fileDescriptor, remaining, 0, remainingLength, 0);
+  } finally {
+    closeSync(fileDescriptor);
+  }
 }

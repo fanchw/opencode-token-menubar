@@ -3,20 +3,23 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path, { dirname } from "node:path"
 import chokidar, { type FSWatcher } from "chokidar"
 
-import { readJsonlEvents } from "./jsonlImporter.js"
+import { compactJsonlFile, readJsonlEvents } from "./jsonlImporter.js"
+import { startIngestServer, type IngestServerHandle } from "./ingestServer.js"
 import { MetricsStore } from "./metricsStore.js"
 import { resolveAppPaths, type AppPaths } from "./paths.js"
 import { installPlugin } from "./pluginInstaller.js"
-import type { DashboardData } from "../shared/metrics.js"
+import type { DashboardData, MetricEvent } from "../shared/metrics.js"
 
 let tray: Tray | null = null
 let window: BrowserWindow | null = null
 let store: MetricsStore | null = null
 let watcher: FSWatcher | null = null
+let ingestServer: IngestServerHandle | null = null
 let paths: AppPaths | null = null
 let importStatePath: string | null = null
 let jsonlOffset = 0
 let importErrors = 0
+let isShuttingDown = false
 
 interface ImportState {
   jsonlOffset: number
@@ -56,6 +59,7 @@ function getDashboardPaths() {
 
   return {
     jsonlPath: paths.jsonlPath,
+    ingestPath: paths.ingestPath,
     sqlitePath: paths.sqlitePath,
     pluginPath: paths.pluginPath,
   }
@@ -107,13 +111,28 @@ function updateTrayTitle() {
 function importNewEvents() {
   if (!store || !paths) return
 
+  const previousOffset = jsonlOffset
   const result = readJsonlEvents(paths.jsonlPath, jsonlOffset)
-  jsonlOffset = result.nextOffset
+  const nextOffset = result.nextOffset
   importErrors += result.errors
   if (result.events.length > 0) {
     store.insertEvents(result.events)
   }
+  jsonlOffset = nextOffset
+  if (nextOffset > previousOffset) {
+    compactJsonlFile(paths.jsonlPath, nextOffset)
+    jsonlOffset = 0
+  }
   writeImportState()
+  updateTrayTitle()
+}
+
+function insertLocalMetric(event: MetricEvent) {
+  if (!store) {
+    throw new Error("Metrics store is not initialized")
+  }
+
+  store.insertEvents([event])
   updateTrayTitle()
 }
 
@@ -181,7 +200,7 @@ function toggleWindow() {
   window.show()
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const userDataPath = app.getPath("userData")
   paths = resolveAppPaths(app.getAppPath(), userDataPath)
   importStatePath = path.join(userDataPath, "import-state.json")
@@ -189,6 +208,14 @@ app.whenReady().then(() => {
   jsonlOffset = importState.jsonlOffset
   importErrors = importState.importErrors
   store = new MetricsStore(paths.sqlitePath)
+  try {
+    ingestServer = await startIngestServer({
+      ingestPath: paths.ingestPath,
+      onMetric: insertLocalMetric,
+    })
+  } catch (error) {
+    console.warn("Failed to start ingest server", error)
+  }
   importNewEvents()
   watchMetricEvents()
 
@@ -214,9 +241,39 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
 })
 
-app.on("before-quit", () => {
-  void watcher?.close()
-  watcher = null
-  store?.close()
-  store = null
+app.on("before-quit", (event) => {
+  if (isShuttingDown) return
+
+  event.preventDefault()
+  isShuttingDown = true
+
+  void (async () => {
+    try {
+      try {
+        await watcher?.close()
+      } catch (error) {
+        console.warn("Failed to close metrics watcher", error)
+      } finally {
+        watcher = null
+      }
+
+      try {
+        await ingestServer?.stop()
+      } catch (error) {
+        console.warn("Failed to stop ingest server", error)
+      } finally {
+        ingestServer = null
+      }
+
+      try {
+        store?.close()
+      } catch (error) {
+        console.warn("Failed to close metrics store", error)
+      } finally {
+        store = null
+      }
+    } finally {
+      app.quit()
+    }
+  })()
 })

@@ -22,11 +22,25 @@ interface MetricEvent {
   tokensPerSecond: number;
 }
 
+interface IngestMetadata {
+  url: string;
+  token: string;
+}
+
+interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data: T;
+}
+
 const outputPath = join(homedir(), ".config", "opencode", "token-metrics", "events.jsonl");
+const ingestPath = join(homedir(), ".config", "opencode", "token-metrics", "ingest.json");
 const snapshotTtlMs = 10 * 60 * 1000;
+const ingestMetadataCacheTtlMs = 1000;
 const maxSnapshots = 500;
 const metricEvents = new Set(["message.updated", "message.part.updated"]);
 const snapshots = new Map<string, MessageSnapshot>();
+let ingestMetadataCache: { expiresAt: number; metadata: IngestMetadata | undefined } | undefined;
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -118,6 +132,73 @@ function pruneSnapshots(now: number): void {
 
 type Shell = Parameters<Parameters<Plugin>[0]>[0]["$"];
 
+async function readIngestMetadata($: Shell): Promise<IngestMetadata | undefined> {
+  const now = Date.now();
+  if (ingestMetadataCache && now < ingestMetadataCache.expiresAt) {
+    return ingestMetadataCache.metadata;
+  }
+
+  const script = [
+    "const fs = require('node:fs');",
+    "const target = process.argv[1];",
+    "try {",
+    "  const raw = fs.readFileSync(target, 'utf8');",
+    "  const parsed = JSON.parse(raw);",
+    "  if (typeof parsed.url === 'string' && typeof parsed.token === 'string') {",
+    "    process.stdout.write(JSON.stringify({ url: parsed.url, token: parsed.token }));",
+    "  }",
+    "} catch {}",
+  ].join("\n");
+
+  try {
+    const result = await $`node -e ${script} ${ingestPath}`;
+    const raw = String(result.stdout ?? "").trim();
+    if (!raw) {
+      ingestMetadataCache = { expiresAt: now + ingestMetadataCacheTtlMs, metadata: undefined };
+      return undefined;
+    }
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed.url !== "string" || typeof parsed.token !== "string") {
+      ingestMetadataCache = { expiresAt: now + ingestMetadataCacheTtlMs, metadata: undefined };
+      return undefined;
+    }
+
+    const metadata = { url: parsed.url, token: parsed.token };
+    ingestMetadataCache = { expiresAt: now + ingestMetadataCacheTtlMs, metadata };
+    return metadata;
+  } catch {
+    ingestMetadataCache = { expiresAt: now + ingestMetadataCacheTtlMs, metadata: undefined };
+    return undefined;
+  }
+}
+
+async function postMetric(metadata: IngestMetadata, metric: MetricEvent): Promise<boolean> {
+  try {
+    const response = await fetch(metadata.url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${metadata.token}`,
+      },
+      body: JSON.stringify(metric),
+    });
+    if (!response.ok) {
+      return false;
+    }
+
+    try {
+      const body = await response.json() as ApiResponse<{ accepted: boolean } | null>;
+
+      return body.code === 0 && body.data?.accepted === true;
+    } catch {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+}
+
 async function appendJsonl($: Shell, metric: MetricEvent): Promise<void> {
   const script = [
     "const fs = require('node:fs');",
@@ -129,6 +210,15 @@ async function appendJsonl($: Shell, metric: MetricEvent): Promise<void> {
   ].join("\n");
 
   await $`node -e ${script} ${outputPath} ${Buffer.from(JSON.stringify(metric)).toString("base64")}`;
+}
+
+async function deliverMetric($: Shell, metric: MetricEvent): Promise<void> {
+  const metadata = await readIngestMetadata($);
+  if (metadata && await postMetric(metadata, metric)) {
+    return;
+  }
+
+  await appendJsonl($, metric);
 }
 
 const plugin: Plugin = async ({ $ }) => {
@@ -170,7 +260,7 @@ const plugin: Plugin = async ({ $ }) => {
         return;
       }
 
-      await appendJsonl($, {
+      await deliverMetric($, {
         id: `${id}-${now}`,
         timestamp: new Date().toISOString(),
         provider: metadata.provider,

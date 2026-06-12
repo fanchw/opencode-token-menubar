@@ -24,6 +24,12 @@ export interface MetricEvent {
   tokensPerSecond: number;
 }
 
+export interface ApiResponse<T> {
+  code: number;
+  message: string;
+  data: T;
+}
+
 export interface TodaySummary {
   requestCount: number;
   totalTokens: number;
@@ -57,6 +63,7 @@ export interface DashboardData {
   pluginInstalled?: boolean;
   paths?: {
     jsonlPath: string;
+    ingestPath: string;
     sqlitePath: string;
     pluginPath: string;
   };
