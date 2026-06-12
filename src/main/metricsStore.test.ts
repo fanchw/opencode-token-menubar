@@ -94,8 +94,8 @@ describe("MetricsStore", () => {
     metricsStore.insertEvents([baseEvents[0], baseEvents[0]]);
 
     const data = metricsStore.getDashboardData({
-      dayStart: "2026-06-11T00:00:00.000Z",
-      dayEnd: "2026-06-12T00:00:00.000Z",
+      start: "2026-06-11T00:00:00.000Z",
+      end: "2026-06-12T00:00:00.000Z",
       recentLimit: 10,
     });
 
@@ -108,8 +108,8 @@ describe("MetricsStore", () => {
     metricsStore.insertEvents(baseEvents);
 
     const data = metricsStore.getDashboardData({
-      dayStart: "2026-06-11T00:00:00.000Z",
-      dayEnd: "2026-06-12T00:00:00.000Z",
+      start: "2026-06-11T00:00:00.000Z",
+      end: "2026-06-12T00:00:00.000Z",
       recentLimit: 2,
     });
 
@@ -176,6 +176,64 @@ describe("MetricsStore", () => {
     expect(data.hourlyTrends).toEqual([
       { hour: "2026-06-11T00:00:00.000Z", totalTokens: 150, averageTokensPerSecond: 50 },
       { hour: "2026-06-11T01:00:00.000Z", totalTokens: 350, averageTokensPerSecond: 37.5 },
+    ]);
+  });
+
+  test("filters dashboard data by time provider and model", () => {
+    const metricsStore = createStore();
+    metricsStore.insertEvents(baseEvents);
+
+    const data = metricsStore.getDashboardData({
+      start: "2026-06-11T00:00:00.000Z",
+      end: "2026-06-11T02:00:00.000Z",
+      providers: ["anthropic"],
+      models: ["claude-haiku-3.5"],
+      recentLimit: 10,
+    });
+
+    expect(data.today).toEqual({
+      requestCount: 1,
+      totalTokens: 50,
+      inputTokens: 40,
+      outputTokens: 10,
+      averageTokensPerSecond: 25,
+    });
+    expect(data.recent.map((event) => event.id)).toEqual(["req-4"]);
+    expect(data.modelRanking).toEqual([
+      {
+        provider: "anthropic",
+        model: "claude-haiku-3.5",
+        requestCount: 1,
+        totalTokens: 50,
+        inputTokens: 40,
+        outputTokens: 10,
+        averageTokensPerSecond: 25,
+      },
+    ]);
+    expect(data.hourlyTrends).toEqual([
+      { hour: "2026-06-11T01:00:00.000Z", totalTokens: 50, averageTokensPerSecond: 25 },
+    ]);
+  });
+
+  test("returns provider and model filter options for selected time range", () => {
+    const metricsStore = createStore();
+    metricsStore.insertEvents(baseEvents);
+
+    const data = metricsStore.getDashboardData({
+      start: "2026-06-11T00:00:00.000Z",
+      end: "2026-06-12T00:00:00.000Z",
+      providers: ["anthropic"],
+      models: ["claude-haiku-3.5"],
+      recentLimit: 10,
+    });
+
+    expect(data.providers).toEqual([
+      { value: "openai", requestCount: 1, totalTokens: 300 },
+      { value: "anthropic", requestCount: 2, totalTokens: 200 },
+    ]);
+    expect(data.models).toEqual([
+      { value: "claude-sonnet-4", requestCount: 1, totalTokens: 150 },
+      { value: "claude-haiku-3.5", requestCount: 1, totalTokens: 50 },
     ]);
   });
 });

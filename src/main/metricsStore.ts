@@ -4,11 +4,9 @@ import { dirname } from "node:path";
 import sqlite from "node-sqlite3-wasm";
 import type { BindValues } from "node-sqlite3-wasm";
 
-import type { DashboardData, MetricEvent } from "../shared/metrics.js";
+import type { DashboardData, DashboardFilters, MetricEvent } from "../shared/metrics.js";
 
-export interface DashboardQuery {
-  dayStart: string;
-  dayEnd: string;
+export interface DashboardQuery extends DashboardFilters {
   recentLimit: number;
 }
 
@@ -90,7 +88,11 @@ export class MetricsStore {
     }
   }
 
-  getDashboardData({ dayStart, dayEnd, recentLimit }: DashboardQuery): DashboardData {
+  getDashboardData({ start, end, providers, models, recentLimit }: DashboardQuery): DashboardData {
+    const dashboardFilters = this.buildFilterClause(start, end, providers, models);
+    const providerOptionFilters = this.buildFilterClause(start, end);
+    const modelOptionFilters = this.buildFilterClause(start, end, providers);
+
     const todaySummary = this.database.get(
       `
         SELECT
@@ -100,9 +102,9 @@ export class MetricsStore {
           COALESCE(SUM(outputTokens), 0) AS outputTokens,
           COALESCE(AVG(speed), 0) AS averageTokensPerSecond
         FROM requests
-        WHERE timestamp >= ? AND timestamp < ?
+        ${dashboardFilters.whereClause}
       `,
-      [dayStart, dayEnd],
+      dashboardFilters.values,
     ) as SummaryRow | undefined ?? {
       requestCount: 0,
       totalTokens: 0,
@@ -123,11 +125,11 @@ export class MetricsStore {
           duration AS durationMs,
           speed AS tokensPerSecond
         FROM requests
-        WHERE timestamp >= ? AND timestamp < ?
+        ${dashboardFilters.whereClause}
         ORDER BY timestamp DESC
         LIMIT ?
       `,
-      [dayStart, dayEnd, recentLimit],
+      [...dashboardFilters.values, recentLimit],
     ) as DashboardData["recent"];
 
     const modelRanking = this.database.all(
@@ -140,11 +142,11 @@ export class MetricsStore {
           SUM(outputTokens) AS outputTokens,
           AVG(speed) AS averageTokensPerSecond
         FROM requests
-        WHERE timestamp >= ? AND timestamp < ?
+        ${dashboardFilters.whereClause}
         GROUP BY provider, model
         ORDER BY totalTokens DESC, requestCount DESC, provider ASC, model ASC
       `,
-      [dayStart, dayEnd],
+      dashboardFilters.values,
     ) as DashboardData["modelRanking"];
 
     const hourlyTrends = this.database.all(
@@ -153,12 +155,38 @@ export class MetricsStore {
           SUM(tokens) AS totalTokens,
           AVG(speed) AS averageTokensPerSecond
         FROM requests
-        WHERE timestamp >= ? AND timestamp < ?
+        ${dashboardFilters.whereClause}
         GROUP BY hour
         ORDER BY hour ASC
       `,
-      [dayStart, dayEnd],
+      dashboardFilters.values,
     ) as DashboardData["hourlyTrends"];
+
+    const providerOptions = this.database.all(
+      `
+        SELECT provider AS value,
+          COUNT(*) AS requestCount,
+          SUM(tokens) AS totalTokens
+        FROM requests
+        ${providerOptionFilters.whereClause}
+        GROUP BY provider
+        ORDER BY totalTokens DESC, requestCount DESC, value ASC
+      `,
+      providerOptionFilters.values,
+    ) as DashboardData["providers"];
+
+    const modelOptions = this.database.all(
+      `
+        SELECT model AS value,
+          COUNT(*) AS requestCount,
+          SUM(tokens) AS totalTokens
+        FROM requests
+        ${modelOptionFilters.whereClause}
+        GROUP BY model
+        ORDER BY totalTokens DESC, requestCount DESC, value ASC
+      `,
+      modelOptionFilters.values,
+    ) as DashboardData["models"];
 
     return {
       today: {
@@ -171,6 +199,8 @@ export class MetricsStore {
       recent,
       modelRanking,
       hourlyTrends,
+      providers: providerOptions,
+      models: modelOptions,
     };
   }
 
@@ -195,5 +225,27 @@ export class MetricsStore {
       CREATE INDEX IF NOT EXISTS idx_requests_timestamp ON requests (timestamp);
       CREATE INDEX IF NOT EXISTS idx_requests_provider_model ON requests (provider, model);
     `);
+  }
+
+  private buildFilterClause(
+    start: string,
+    end: string,
+    providers?: string[],
+    models?: string[],
+  ): { whereClause: string; values: BindValues } {
+    const clauses = ["timestamp >= ?", "timestamp < ?"];
+    const values: BindValues = [start, end];
+
+    if (providers?.length) {
+      clauses.push(`provider IN (${providers.map(() => "?").join(", ")})`);
+      values.push(...providers);
+    }
+
+    if (models?.length) {
+      clauses.push(`model IN (${models.map(() => "?").join(", ")})`);
+      values.push(...models);
+    }
+
+    return { whereClause: `WHERE ${clauses.join(" AND ")}`, values };
   }
 }
