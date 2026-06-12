@@ -35,6 +35,30 @@ describe("toMetricEvent", () => {
     });
   });
 
+  test("reads model identity from real OpenCode message info fields", () => {
+    const event = {
+      event: {
+        id: "evt-message-real",
+        type: "message.updated",
+        properties: {
+          sessionID: "session-1",
+          info: {
+            id: "message-1",
+            modelID: "glm-5.1",
+            providerID: "zhipuai-coding-plan",
+            tokens: { total: 42475, input: 42136, output: 178, reasoning: 33, cache: { write: 0, read: 128 } },
+            time: { created: 1781254021197 },
+          },
+        },
+      },
+    };
+
+    const metric = toMetricEvent(event, undefined, 1781254022606);
+
+    expect(metric?.event?.provider).toBe("zhipuai-coding-plan");
+    expect(metric?.event?.model).toBe("glm-5.1");
+  });
+
   test("reads model identity from message part events", () => {
     const previous = {
       updatedAt: 1781248819000,

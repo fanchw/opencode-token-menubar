@@ -51,8 +51,8 @@ function providerAndModel(event: Record<string, unknown>, fallback?: { provider:
   const message = readRecord(event.message);
 
   return {
-    provider: readString(event.provider) ?? readString(properties?.provider) ?? readString(message?.provider) ?? readString(nested?.providerID) ?? readString(nested?.provider) ?? fallback?.provider ?? "unknown",
-    model: readString(event.model) ?? readString(properties?.model) ?? readString(message?.model) ?? readString(nested?.modelID) ?? readString(nested?.id) ?? readString(nested?.model) ?? fallback?.model ?? "unknown",
+    provider: readString(event.provider) ?? readString(properties?.provider) ?? readString(info?.providerID) ?? readString(message?.provider) ?? readString(nested?.providerID) ?? readString(nested?.provider) ?? fallback?.provider ?? "unknown",
+    model: readString(event.model) ?? readString(properties?.model) ?? readString(info?.modelID) ?? readString(message?.model) ?? readString(nested?.modelID) ?? readString(nested?.id) ?? readString(nested?.model) ?? fallback?.model ?? "unknown",
   };
 }
 
