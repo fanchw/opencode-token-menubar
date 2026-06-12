@@ -4,7 +4,7 @@ import {
   formatTimeInZone,
   resolveQuickRange,
   validateCustomRange,
-} from "./timeFilters";
+} from "./timeFilters.js";
 
 describe("timeFilters", () => {
   test("resolves local today from start of day to next local day boundary", () => {

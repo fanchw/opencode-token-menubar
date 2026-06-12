@@ -232,9 +232,9 @@ export class MetricsStore {
     end: string,
     providers?: string[],
     models?: string[],
-  ): { whereClause: string; values: BindValues } {
+  ): { whereClause: string; values: Array<string | number> } {
     const clauses = ["timestamp >= ?", "timestamp < ?"];
-    const values: BindValues = [start, end];
+    const values: Array<string | number> = [start, end];
 
     if (providers?.length) {
       clauses.push(`provider IN (${providers.map(() => "?").join(", ")})`);

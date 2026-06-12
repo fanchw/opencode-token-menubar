@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, screen, Tray } from "electron"
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, Tray } from "electron"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path, { dirname } from "node:path"
 import chokidar, { type FSWatcher } from "chokidar"
@@ -8,7 +8,7 @@ import { startIngestServer, type IngestServerHandle } from "./ingestServer.js"
 import { MetricsStore } from "./metricsStore.js"
 import { resolveAppPaths, type AppPaths } from "./paths.js"
 import { installPlugin } from "./pluginInstaller.js"
-import type { DashboardData, MetricEvent } from "../shared/metrics.js"
+import type { DashboardData, DashboardFilters, MetricEvent } from "../shared/metrics.js"
 
 let tray: Tray | null = null
 let window: BrowserWindow | null = null
@@ -79,12 +79,54 @@ function getTodayRange() {
   return { dayStart: dayStart.toISOString(), dayEnd: dayEnd.toISOString() }
 }
 
-function getDashboardData(): DashboardData {
+function getDefaultDashboardFilters(): DashboardFilters {
+  const { dayStart, dayEnd } = getTodayRange()
+
+  return { start: dayStart, end: dayEnd }
+}
+
+function broadcastDashboardUpdated() {
+  if (!window || window.isDestroyed() || window.webContents.isDestroyed()) return
+
+  window.webContents.send("metrics:dashboard-updated")
+}
+
+function normalizeDashboardFilters(filters: unknown): DashboardFilters {
+  if (
+    !filters
+    || typeof filters !== "object"
+    || typeof (filters as Partial<DashboardFilters>).start !== "string"
+    || typeof (filters as Partial<DashboardFilters>).end !== "string"
+    || !(filters as Partial<DashboardFilters>).start?.trim()
+    || !(filters as Partial<DashboardFilters>).end?.trim()
+  ) {
+    return getDefaultDashboardFilters()
+  }
+
+  const normalized: DashboardFilters = {
+    start: (filters as DashboardFilters).start,
+    end: (filters as DashboardFilters).end,
+  }
+  if (Array.isArray((filters as Partial<DashboardFilters>).providers)) {
+    normalized.providers = (filters as Partial<DashboardFilters>).providers?.filter(
+      (provider): provider is string => typeof provider === "string",
+    )
+  }
+  if (Array.isArray((filters as Partial<DashboardFilters>).models)) {
+    normalized.models = (filters as Partial<DashboardFilters>).models?.filter(
+      (model): model is string => typeof model === "string",
+    )
+  }
+
+  return normalized
+}
+
+function getDashboardData(filters = getDefaultDashboardFilters()): DashboardData {
   if (!store || !paths) {
     throw new Error("Metrics store is not initialized")
   }
 
-  const data = store.getDashboardData({ ...getTodayRange(), recentLimit: 20 })
+  const data = store.getDashboardData({ ...filters, recentLimit: 50 })
 
   return {
     ...data,
@@ -108,6 +150,50 @@ function updateTrayTitle() {
   }
 }
 
+async function installGlobalPlugin() {
+  if (!paths) {
+    throw new Error("App paths are not initialized")
+  }
+
+  const result = await installPlugin({
+    sourcePath: paths.bundledPluginPath,
+    targetPath: paths.pluginPath,
+    sharedSourcePath: paths.bundledPluginSharedPath,
+    sharedTargetPath: paths.pluginSharedPath,
+    configPath: paths.configPath,
+  })
+  updateTrayMenu()
+  broadcastDashboardUpdated()
+
+  return result
+}
+
+function updateTrayMenu() {
+  if (!tray) return
+
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: "Refresh",
+      click: () => {
+        if (!importNewEvents()) {
+          broadcastDashboardUpdated()
+        }
+      },
+    },
+    {
+      label: isPluginInstalled() ? "Reinstall Plugin" : "Install Plugin",
+      click: () => {
+        installGlobalPlugin().catch((error) => console.warn("Failed to install plugin", error))
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Quit",
+      click: () => app.quit(),
+    },
+  ]))
+}
+
 function createTrayIcon() {
   const icon = nativeImage.createFromDataURL(
     `data:image/svg+xml;utf8,${encodeURIComponent(`
@@ -122,7 +208,7 @@ function createTrayIcon() {
 }
 
 function importNewEvents() {
-  if (!store || !paths) return
+  if (!store || !paths) return false
 
   const previousOffset = jsonlOffset
   const result = readJsonlEvents(paths.jsonlPath, jsonlOffset)
@@ -130,6 +216,7 @@ function importNewEvents() {
   importErrors += result.errors
   if (result.events.length > 0) {
     store.insertEvents(result.events)
+    broadcastDashboardUpdated()
   }
   jsonlOffset = nextOffset
   if (nextOffset > previousOffset) {
@@ -138,6 +225,8 @@ function importNewEvents() {
   }
   writeImportState()
   updateTrayTitle()
+
+  return result.events.length > 0
 }
 
 function insertLocalMetric(event: MetricEvent) {
@@ -147,6 +236,7 @@ function insertLocalMetric(event: MetricEvent) {
 
   store.insertEvents([event])
   updateTrayTitle()
+  broadcastDashboardUpdated()
 }
 
 function watchMetricEvents() {
@@ -236,26 +326,17 @@ app.whenReady().then(async () => {
   importNewEvents()
   watchMetricEvents()
 
-  ipcMain.handle("metrics:get-dashboard-data", () => getDashboardData())
-  ipcMain.handle("plugin:install", async () => {
-    if (!paths) {
-      throw new Error("App paths are not initialized")
-    }
-
-    return installPlugin({
-      sourcePath: paths.bundledPluginPath,
-      targetPath: paths.pluginPath,
-      sharedSourcePath: paths.bundledPluginSharedPath,
-      sharedTargetPath: paths.pluginSharedPath,
-      configPath: paths.configPath,
-    })
+  ipcMain.handle("metrics:get-dashboard-data", (_event, filters: unknown) => {
+    return getDashboardData(normalizeDashboardFilters(filters))
   })
+  ipcMain.handle("plugin:install", () => installGlobalPlugin())
 
   createWindow()
   tray = new Tray(createTrayIcon())
   tray.setTitle("OC")
   tray.setToolTip("OpenCode Token Menubar")
   tray.on("click", toggleWindow)
+  updateTrayMenu()
   updateTrayTitle()
 })
 

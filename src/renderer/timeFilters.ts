@@ -20,6 +20,8 @@ type CustomRangeResult =
   | { valid: true; start: string; end: string }
   | { valid: false; message: string };
 
+type CalendarRange = "today" | "week" | "month";
+
 const relativeDurations: Record<Exclude<QuickRange, "today" | "week" | "month">, number> = {
   "15m": 15 * 60 * 1000,
   "1h": 60 * 60 * 1000,
@@ -42,8 +44,9 @@ export function resolveQuickRange(
     };
   }
 
-  const start = getCalendarStart(range, now, timezone);
-  const end = getCalendarEnd(range, start, timezone);
+  const calendarRange = range as CalendarRange;
+  const start = getCalendarStart(calendarRange, now, timezone);
+  const end = getCalendarEnd(calendarRange, start, timezone);
 
   return {
     start: start.toISOString(),
@@ -85,7 +88,7 @@ export function formatTimeInZone(
 }
 
 function getCalendarStart(
-  range: Exclude<QuickRange, keyof typeof relativeDurations>,
+  range: CalendarRange,
   now: Date,
   timezone: TimezoneMode,
 ): Date {
@@ -115,7 +118,7 @@ function getCalendarStart(
 }
 
 function getCalendarEnd(
-  range: Exclude<QuickRange, keyof typeof relativeDurations>,
+  range: CalendarRange,
   start: Date,
   timezone: TimezoneMode,
 ): Date {
