@@ -245,6 +245,7 @@ app.whenReady().then(async () => {
     return installPlugin({
       sourcePath: paths.bundledPluginPath,
       targetPath: paths.pluginPath,
+      configPath: paths.configPath,
     })
   })
 

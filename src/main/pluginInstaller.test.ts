@@ -36,6 +36,26 @@ describe("installPlugin", () => {
     expect(await readFile(targetPath, "utf8")).toBe("export default { updated: true }\n");
   });
 
+  test("registers copied plugin in opencode config", async () => {
+    const root = await mkdtemp(join(tmpdir(), "opencode-plugin-installer-"));
+    const sourcePath = join(root, "plugin", "token-metrics.ts");
+    const targetPath = join(root, "config", "opencode", "plugins", "token-metrics.ts");
+    const configPath = join(root, "config", "opencode", "opencode.json");
+
+    await mkdir(join(root, "plugin"), { recursive: true });
+    await mkdir(join(root, "config", "opencode"), { recursive: true });
+    await writeFile(sourcePath, "export default {}\n");
+    await writeFile(configPath, JSON.stringify({ plugin: ["superpowers@git+https://github.com/obra/superpowers.git"] }, null, 2));
+
+    await installPlugin({ sourcePath, targetPath, configPath });
+
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    expect(config.plugin).toEqual([
+      "superpowers@git+https://github.com/obra/superpowers.git",
+      "./plugins/token-metrics.ts",
+    ]);
+  });
+
   test("throws when source plugin does not exist", async () => {
     const root = await mkdtemp(join(tmpdir(), "opencode-plugin-installer-"));
     const sourcePath = join(root, "plugin", "missing.ts");

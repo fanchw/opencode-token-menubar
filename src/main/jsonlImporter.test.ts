@@ -10,6 +10,7 @@ import { resolveAppPaths } from "./paths.js";
 describe("resolveAppPaths", () => {
   test("resolves OpenCode metric and app paths", () => {
     expect(resolveAppPaths("/app/root", "/user/data")).toEqual({
+      configPath: join(homedir(), ".config", "opencode", "opencode.json"),
       jsonlPath: join(homedir(), ".config", "opencode", "token-metrics", "events.jsonl"),
       ingestPath: join(homedir(), ".config", "opencode", "token-metrics", "ingest.json"),
       sqlitePath: join("/user/data", "metrics.db"),

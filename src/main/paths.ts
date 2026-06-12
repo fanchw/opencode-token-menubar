@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 export interface AppPaths {
+  configPath: string;
   jsonlPath: string;
   ingestPath: string;
   sqlitePath: string;
@@ -14,6 +15,7 @@ export function resolveAppPaths(appPath = process.cwd(), userDataPath = process.
   const tokenMetricsPath = join(configPath, "token-metrics");
 
   return {
+    configPath: join(configPath, "opencode.json"),
     jsonlPath: join(tokenMetricsPath, "events.jsonl"),
     ingestPath: join(tokenMetricsPath, "ingest.json"),
     sqlitePath: join(userDataPath, "metrics.db"),
