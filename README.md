@@ -40,7 +40,7 @@ bun run build
 The app installs the bundled plugin globally to:
 
 ```text
-~/.config/opencode/plugin/token-metrics.ts
+~/.config/opencode/plugins/token-metrics.ts
 ```
 
 Restart OpenCode after installing or reinstalling the plugin. OpenCode loads plugins at startup, so an already-running OpenCode session will not pick up plugin changes until it restarts.

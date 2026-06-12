@@ -9,7 +9,7 @@ describe("installPlugin", () => {
   test("copies bundled plugin to target path", async () => {
     const root = await mkdtemp(join(tmpdir(), "opencode-plugin-installer-"));
     const sourcePath = join(root, "plugin", "token-metrics.ts");
-    const targetPath = join(root, "config", "opencode", "plugin", "token-metrics.ts");
+    const targetPath = join(root, "config", "opencode", "plugins", "token-metrics.ts");
 
     await mkdir(join(root, "plugin"), { recursive: true });
     await writeFile(sourcePath, "export default {}\n");
@@ -23,10 +23,10 @@ describe("installPlugin", () => {
   test("overwrites existing target when reinstalling", async () => {
     const root = await mkdtemp(join(tmpdir(), "opencode-plugin-installer-"));
     const sourcePath = join(root, "plugin", "token-metrics.ts");
-    const targetPath = join(root, "config", "opencode", "plugin", "token-metrics.ts");
+    const targetPath = join(root, "config", "opencode", "plugins", "token-metrics.ts");
 
     await mkdir(join(root, "plugin"), { recursive: true });
-    await mkdir(join(root, "config", "opencode", "plugin"), { recursive: true });
+    await mkdir(join(root, "config", "opencode", "plugins"), { recursive: true });
     await writeFile(sourcePath, "export default { updated: true }\n");
     await writeFile(targetPath, "export default { old: true }\n");
 
@@ -39,7 +39,7 @@ describe("installPlugin", () => {
   test("throws when source plugin does not exist", async () => {
     const root = await mkdtemp(join(tmpdir(), "opencode-plugin-installer-"));
     const sourcePath = join(root, "plugin", "missing.ts");
-    const targetPath = join(root, "config", "opencode", "plugin", "token-metrics.ts");
+    const targetPath = join(root, "config", "opencode", "plugins", "token-metrics.ts");
 
     await expect(installPlugin({ sourcePath, targetPath })).rejects.toThrow();
   });

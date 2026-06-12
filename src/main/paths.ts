@@ -14,7 +14,7 @@ export function resolveAppPaths(appPath = process.cwd(), userDataPath = process.
   return {
     jsonlPath: join(configPath, "token-metrics", "events.jsonl"),
     sqlitePath: join(userDataPath, "metrics.db"),
-    pluginPath: join(configPath, "plugin", "token-metrics.ts"),
+    pluginPath: join(configPath, "plugins", "token-metrics.ts"),
     bundledPluginPath: join(appPath, "plugin", "token-metrics.ts"),
   };
 }

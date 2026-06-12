@@ -15,7 +15,7 @@ The first version provides:
 
 Use an Electron menubar app under `js/opencode-token-menubar/`.
 
-The app ships with an OpenCode plugin template. The app installs that plugin globally to `~/.config/opencode/plugin/`, then prompts the user to restart OpenCode because OpenCode loads plugins only at startup.
+The app ships with an OpenCode plugin template. The app installs that plugin globally to `~/.config/opencode/plugins/`, then prompts the user to restart OpenCode because OpenCode loads plugins only at startup.
 
 The plugin writes raw metric events as JSONL. The menubar app watches the JSONL file and imports events into a local SQLite database for aggregation and dashboard queries.
 
@@ -23,20 +23,20 @@ This keeps the plugin small and stable while allowing the app to maintain richer
 
 ## Data Flow
 
-1. OpenCode starts and loads the global plugin from `~/.config/opencode/plugin/`.
-2. The plugin listens to LLM lifecycle events and derives request metrics.
-3. The plugin appends one JSON object per completed request to `~/.config/opencode/token-metrics/events.jsonl`.
+1. OpenCode starts and loads the global plugin from `~/.config/opencode/plugins/`.
+2. The plugin listens to `message.updated` and `message.part.updated` events and derives positive token usage deltas.
+3. The plugin appends one JSON object per positive token usage delta to `~/.config/opencode/token-metrics/events.jsonl`.
 4. The menubar app watches the JSONL file for changes.
 5. The app imports new lines into SQLite at `~/Library/Application Support/opencode-token-menubar/metrics.db`.
 6. The popup dashboard queries SQLite for summary cards, recent requests, rankings, and trends.
 
 ## Metric Event Shape
 
-Each JSONL event represents one completed LLM request.
+Each JSONL event represents a positive token usage delta observed from OpenCode message update events.
 
 ```json
 {
-  "id": "stable-request-id",
+  "id": "message-or-session-id-1760000000000",
   "timestamp": "2026-06-11T08:30:00.000Z",
   "provider": "openai",
   "model": "gpt-4.1",
@@ -48,7 +48,7 @@ Each JSONL event represents one completed LLM request.
 }
 ```
 
-The plugin should tolerate missing provider, model, or token fields. Missing provider/model values are recorded as `unknown`. Missing token counts default to `0` so the event is still visible in recent requests.
+The plugin should tolerate missing provider, model, or token fields. Missing provider/model values are recorded as `unknown`. Missing or unchanged token counts produce no JSONL row because only positive token deltas are useful for dashboard totals.
 
 ## Storage
 
@@ -174,7 +174,7 @@ The settings area includes:
 The first version installs globally by default:
 
 ```text
-~/.config/opencode/plugin/token-metrics.ts
+~/.config/opencode/plugins/token-metrics.ts
 ```
 
 Project-level installation is out of scope for the first version.

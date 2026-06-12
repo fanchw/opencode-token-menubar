@@ -344,7 +344,7 @@ bun run dev:app
 The app installs the bundled plugin globally to:
 
 ```text
-~/.config/opencode/plugin/token-metrics.ts
+~/.config/opencode/plugins/token-metrics.ts
 ```
 
 Restart OpenCode after installing or reinstalling the plugin.
@@ -882,7 +882,7 @@ export function resolveAppPaths(appPath = app.getAppPath(), userDataPath = app.g
   return {
     jsonlPath: path.join(home, ".config/opencode/token-metrics/events.jsonl"),
     sqlitePath: path.join(userDataPath, "metrics.db"),
-    pluginPath: path.join(home, ".config/opencode/plugin/token-metrics.ts"),
+    pluginPath: path.join(home, ".config/opencode/plugins/token-metrics.ts"),
     bundledPluginPath: path.join(appPath, "plugin/token-metrics.ts"),
   }
 }
@@ -972,7 +972,7 @@ describe("installPlugin", () => {
   it("copies bundled plugin to global plugin path", () => {
     tempDir = mkdtempSync(path.join(tmpdir(), "plugin-install-"))
     const source = path.join(tempDir, "source.ts")
-    const target = path.join(tempDir, ".config/opencode/plugin/token-metrics.ts")
+    const target = path.join(tempDir, ".config/opencode/plugins/token-metrics.ts")
     writeFileSync(source, "export default async () => ({})\n")
 
     const result = installPlugin({ sourcePath: source, targetPath: target })
@@ -1068,16 +1068,7 @@ export default (async ({ $ }) => {
   return {
     event: async (input: any) => {
       const type = asString(input?.type, "")
-      if (type === "llm.start" || type === "message.start") {
-        pending.set(eventId(input), {
-          startedAt: Date.now(),
-          provider: asString(input?.provider ?? input?.properties?.provider),
-          model: asString(input?.model ?? input?.properties?.model),
-        })
-        return
-      }
-
-      if (type !== "llm.stop" && type !== "message.stop") return
+      if (type !== "message.updated" && type !== "message.part.updated") return
 
       const id = eventId(input)
       const started = pending.get(id)
@@ -1612,7 +1603,7 @@ bun run dev:app
 Use the app's `Install Plugin` button. It writes the bundled plugin to:
 
 ```text
-~/.config/opencode/plugin/token-metrics.ts
+~/.config/opencode/plugins/token-metrics.ts
 ```
 
 Restart OpenCode after installing or reinstalling the plugin. Running OpenCode sessions keep using the plugins that were loaded at startup.

@@ -12,7 +12,7 @@ describe("resolveAppPaths", () => {
     expect(resolveAppPaths("/app/root", "/user/data")).toEqual({
       jsonlPath: join(homedir(), ".config", "opencode", "token-metrics", "events.jsonl"),
       sqlitePath: join("/user/data", "metrics.db"),
-      pluginPath: join(homedir(), ".config", "opencode", "plugin", "token-metrics.ts"),
+      pluginPath: join(homedir(), ".config", "opencode", "plugins", "token-metrics.ts"),
       bundledPluginPath: join("/app/root", "plugin", "token-metrics.ts"),
     });
   });
