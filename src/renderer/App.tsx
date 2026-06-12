@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Area,
   AreaChart,
@@ -9,9 +9,24 @@ import {
   YAxis,
 } from "recharts"
 
-import type { DashboardData } from "../shared/metrics.js"
+import type { DashboardData, DashboardFilters, FilterOption } from "../shared/metrics.js"
+import { formatTokenUnit } from "../shared/metrics.js"
+import { formatTimeInZone, resolveQuickRange } from "./timeFilters.js"
+import type { QuickRange, TimezoneMode } from "./timeFilters.js"
 
-const refreshIntervalMs = 2_000
+const debounceMs = 120
+
+const quickRanges: Array<{ label: string; value: QuickRange }> = [
+  { label: "Today", value: "today" },
+  { label: "Week", value: "week" },
+  { label: "Month", value: "month" },
+  { label: "15m", value: "15m" },
+  { label: "1h", value: "1h" },
+  { label: "6h", value: "6h" },
+  { label: "24h", value: "24h" },
+  { label: "7d", value: "7d" },
+  { label: "30d", value: "30d" },
+]
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(Number.isFinite(value) ? Math.round(value) : 0)
@@ -21,35 +36,40 @@ function formatSpeed(value: number): string {
   return `${Number.isFinite(value) ? value.toFixed(1) : "0.0"} tok/s`
 }
 
-function formatTime(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value))
-}
-
-function formatHour(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "2-digit",
-  }).format(new Date(value))
-}
-
 export default function App() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isInstalling, setIsInstalling] = useState(false)
+  const [quickRange, setQuickRange] = useState<QuickRange>("today")
+  const [timezone, setTimezone] = useState<TimezoneMode>("local")
+  const [selectedProviders, setSelectedProviders] = useState<string[]>([])
+  const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [providerSearch, setProviderSearch] = useState("")
+  const [modelSearch, setModelSearch] = useState("")
   const mountedRef = useRef(false)
   const inFlightRef = useRef(false)
   const isInstallingRef = useRef(false)
+  const latestFiltersRef = useRef<DashboardFilters | null>(null)
+  const debounceTimerRef = useRef<number | null>(null)
 
-  async function refreshDashboard(options: { force?: boolean } = {}) {
+  const filters = useMemo<DashboardFilters>(() => {
+    const range = resolveQuickRange(quickRange, new Date(), timezone)
+
+    return {
+      ...range,
+      ...(selectedProviders.length ? { providers: selectedProviders } : {}),
+      ...(selectedModels.length ? { models: selectedModels } : {}),
+    }
+  }, [quickRange, selectedModels, selectedProviders, timezone])
+
+  const refreshDashboard = useCallback(async (nextFilters: DashboardFilters, options: { force?: boolean } = {}) => {
     if (!mountedRef.current || inFlightRef.current || (isInstallingRef.current && !options.force)) {
       return
     }
 
     inFlightRef.current = true
     try {
-      const nextDashboard = await window.tokenMetrics.getDashboardData()
+      const nextDashboard = await window.tokenMetrics.getDashboardData(nextFilters)
       if (mountedRef.current) {
         setDashboard(nextDashboard)
         setError(null)
@@ -61,18 +81,40 @@ export default function App() {
     } finally {
       inFlightRef.current = false
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    latestFiltersRef.current = filters
+    void refreshDashboard(filters)
+  }, [filters, refreshDashboard])
 
   useEffect(() => {
     mountedRef.current = true
-    void refreshDashboard()
-    const timer = window.setInterval(() => void refreshDashboard(), refreshIntervalMs)
+    const nextFilters = latestFiltersRef.current
+    if (nextFilters) {
+      void refreshDashboard(nextFilters)
+    }
+    const unsubscribe = window.tokenMetrics.onDashboardUpdated(() => {
+      if (debounceTimerRef.current !== null) {
+        window.clearTimeout(debounceTimerRef.current)
+      }
+      debounceTimerRef.current = window.setTimeout(() => {
+        debounceTimerRef.current = null
+        const nextFilters = latestFiltersRef.current
+        if (nextFilters) {
+          void refreshDashboard(nextFilters)
+        }
+      }, debounceMs)
+    })
 
     return () => {
       mountedRef.current = false
-      window.clearInterval(timer)
+      if (debounceTimerRef.current !== null) {
+        window.clearTimeout(debounceTimerRef.current)
+      }
+      unsubscribe()
     }
-  }, [])
+  }, [refreshDashboard])
 
   async function handleInstallPlugin() {
     setIsInstalling(true)
@@ -87,7 +129,7 @@ export default function App() {
       }
     } finally {
       if (shouldRefresh) {
-        await refreshDashboard({ force: true })
+        await refreshDashboard(latestFiltersRef.current ?? filters, { force: true })
       }
       isInstallingRef.current = false
       if (mountedRef.current) {
@@ -100,7 +142,7 @@ export default function App() {
   const hasMetrics = Boolean(today?.requestCount)
   const chartData = dashboard?.hourlyTrends.map((row) => ({
     ...row,
-    label: formatHour(row.hour),
+    label: formatTimeInZone(row.hour, timezone, { hour: "2-digit" }),
   })) ?? []
 
   return (
@@ -121,20 +163,63 @@ export default function App() {
         <section className="notice">Install the plugin, then restart OpenCode to start collecting metrics.</section>
       ) : null}
 
+      <section className="filter-panel panel">
+        <div className="filter-group quick-range-group">
+          <span>Range</span>
+          <div className="chip-row">
+            {quickRanges.map((range) => (
+              <button
+                className={range.value === quickRange ? "chip active" : "chip"}
+                key={range.value}
+                onClick={() => setQuickRange(range.value)}
+                type="button"
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="filter-group timezone-select">
+          <span>Timezone</span>
+          <select value={timezone} onChange={(event) => setTimezone(event.target.value as TimezoneMode)}>
+            <option value="local">Local</option>
+            <option value="utc">UTC</option>
+          </select>
+        </label>
+        <MultiSelect
+          label="Providers"
+          options={dashboard?.providers ?? []}
+          search={providerSearch}
+          selected={selectedProviders}
+          onClear={() => setSelectedProviders([])}
+          onSearchChange={setProviderSearch}
+          onToggle={(value) => setSelectedProviders((current) => toggleSelection(current, value))}
+        />
+        <MultiSelect
+          label="Models"
+          options={dashboard?.models ?? []}
+          search={modelSearch}
+          selected={selectedModels}
+          onClear={() => setSelectedModels([])}
+          onSearchChange={setModelSearch}
+          onToggle={(value) => setSelectedModels((current) => toggleSelection(current, value))}
+        />
+      </section>
+
       <section className="summary-grid">
         <article className="metric-card">
           <span>Total Tokens</span>
-          <strong>{formatNumber(today?.totalTokens ?? 0)}</strong>
-          <small>{formatNumber(today?.requestCount ?? 0)} requests today</small>
+          <strong>{formatTokenUnit(today?.totalTokens ?? 0)}</strong>
+          <small>{formatNumber(today?.requestCount ?? 0)} requests</small>
         </article>
         <article className="metric-card">
           <span>Input Tokens</span>
-          <strong>{formatNumber(today?.inputTokens ?? 0)}</strong>
+          <strong>{formatTokenUnit(today?.inputTokens ?? 0)}</strong>
           <small>Prompt usage</small>
         </article>
         <article className="metric-card">
           <span>Output Tokens</span>
-          <strong>{formatNumber(today?.outputTokens ?? 0)}</strong>
+          <strong>{formatTokenUnit(today?.outputTokens ?? 0)}</strong>
           <small>Completion usage</small>
         </article>
         <article className="metric-card">
@@ -171,7 +256,7 @@ export default function App() {
                     borderRadius: 12,
                     color: "#f8fafc",
                   }}
-                  formatter={(value) => [formatNumber(Number(value)), "tokens"]}
+                  formatter={(value) => [formatTokenUnit(Number(value)), "tokens"]}
                   labelFormatter={(_, payload) => payload[0]?.payload.hour ?? ""}
                 />
                 <Area dataKey="totalTokens" fill="url(#tokenGradient)" stroke="#38bdf8" strokeWidth={2} type="monotone" />
@@ -200,8 +285,8 @@ export default function App() {
                     <span>{model.provider}</span>
                   </div>
                   <div className="row-metrics">
-                    <b>{formatNumber(model.totalTokens)}</b>
-                    <span>{model.requestCount} req</span>
+                    <b>{formatTokenUnit(model.totalTokens)}</b>
+                    <span>{formatNumber(model.requestCount)} req</span>
                     <span>{formatSpeed(model.averageTokensPerSecond)}</span>
                   </div>
                 </div>
@@ -225,12 +310,12 @@ export default function App() {
                 <div className="request-row" key={request.id}>
                   <div>
                     <strong>{request.model}</strong>
-                    <span>{request.provider} · {formatTime(request.timestamp)}</span>
+                    <span>{request.provider} · {formatTimeInZone(request.timestamp, timezone)}</span>
                   </div>
                   <div className="row-metrics">
-                    <b>{formatNumber(request.totalTokens)}</b>
-                    <span>{formatNumber(request.inputTokens)} in</span>
-                    <span>{formatNumber(request.outputTokens)} out</span>
+                    <b>{formatTokenUnit(request.totalTokens)}</b>
+                    <span>{formatTokenUnit(request.inputTokens)} in</span>
+                    <span>{formatTokenUnit(request.outputTokens)} out</span>
                   </div>
                 </div>
               ))}
@@ -275,6 +360,67 @@ export default function App() {
       {dashboard && !hasMetrics ? null : <span className="sr-only">Dashboard loaded</span>}
     </main>
   )
+}
+
+function MultiSelect({
+  label,
+  options,
+  search,
+  selected,
+  onClear,
+  onSearchChange,
+  onToggle,
+}: {
+  label: string
+  options: FilterOption[]
+  search: string
+  selected: string[]
+  onClear: () => void
+  onSearchChange: (value: string) => void
+  onToggle: (value: string) => void
+}) {
+  const normalizedSearch = search.trim().toLowerCase()
+  const visibleOptions = options.filter((option) => option.value.toLowerCase().includes(normalizedSearch))
+
+  return (
+    <div className="multi-select filter-group">
+      <div className="multi-select-header">
+        <span>{label}</span>
+        <button disabled={!selected.length} onClick={onClear} type="button">
+          Clear
+        </button>
+      </div>
+      <input
+        aria-label={`Search ${label.toLowerCase()}`}
+        className="multi-select-search"
+        onChange={(event) => onSearchChange(event.target.value)}
+        placeholder={`Search ${label.toLowerCase()}`}
+        type="search"
+        value={search}
+      />
+      <div className="option-chip-row">
+        {visibleOptions.length ? visibleOptions.map((option) => {
+          const isSelected = selected.includes(option.value)
+
+          return (
+            <button
+              className={isSelected ? "option-chip active" : "option-chip"}
+              key={option.value}
+              onClick={() => onToggle(option.value)}
+              type="button"
+            >
+              <span>{option.value}</span>
+              <small>{formatTokenUnit(option.totalTokens)}</small>
+            </button>
+          )
+        }) : <span className="empty-options">No options</span>}
+      </div>
+    </div>
+  )
+}
+
+function toggleSelection(current: string[], value: string): string[] {
+  return current.includes(value) ? current.filter((item) => item !== value) : [...current, value]
 }
 
 function EmptyState({ title, description }: { title: string; description: string }) {
