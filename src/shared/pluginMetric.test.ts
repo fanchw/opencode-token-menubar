@@ -34,4 +34,35 @@ describe("toMetricEvent", () => {
       tokensPerSecond: 157,
     });
   });
+
+  test("reads model identity from message part events", () => {
+    const previous = {
+      updatedAt: 1781248819000,
+      provider: "zhipuai-coding-plan",
+      model: "glm-5.1",
+      inputTokens: 100,
+      outputTokens: 57,
+    };
+    const event = {
+      event: {
+        id: "evt-part",
+        type: "message.part.updated",
+        properties: {
+          part: { messageID: "message-1" },
+          info: {
+            model: { providerID: "zhipuai-coding-plan", modelID: "glm-5.1" },
+            tokens: { input: 120, output: 80, reasoning: 5, cache: { read: 0, write: 0 } },
+            time: { updated: 1781248821000 },
+          },
+        },
+      },
+    };
+
+    const metric = toMetricEvent(event, previous, 1781248821000);
+
+    expect(metric?.event?.provider).toBe("zhipuai-coding-plan");
+    expect(metric?.event?.model).toBe("glm-5.1");
+    expect(metric?.event?.inputTokens).toBe(20);
+    expect(metric?.event?.outputTokens).toBe(28);
+  });
 });

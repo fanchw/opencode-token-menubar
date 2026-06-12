@@ -1,4 +1,6 @@
+import { mkdirSync, readFileSync, appendFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { dirname } from "node:path";
 import { join } from "node:path";
 import type { Plugin } from "@opencode-ai/plugin";
 import { toMetricEvent, type MessageSnapshot } from "../shared/pluginMetric.ts";
@@ -53,35 +55,14 @@ function pruneSnapshots(now: number): void {
   }
 }
 
-type Shell = Parameters<Parameters<Plugin>[0]>[0]["$"];
-
-async function readIngestMetadata($: Shell): Promise<IngestMetadata | undefined> {
+function readIngestMetadata(): IngestMetadata | undefined {
   const now = Date.now();
   if (ingestMetadataCache && now < ingestMetadataCache.expiresAt) {
     return ingestMetadataCache.metadata;
   }
 
-  const script = [
-    "const fs = require('node:fs');",
-    "const target = process.argv[1];",
-    "try {",
-    "  const raw = fs.readFileSync(target, 'utf8');",
-    "  const parsed = JSON.parse(raw);",
-    "  if (typeof parsed.url === 'string' && typeof parsed.token === 'string') {",
-    "    process.stdout.write(JSON.stringify({ url: parsed.url, token: parsed.token }));",
-    "  }",
-    "} catch {}",
-  ].join("\n");
-
   try {
-    const result = await $`node -e ${script} ${ingestPath}`;
-    const raw = String(result.stdout ?? "").trim();
-    if (!raw) {
-      ingestMetadataCache = { expiresAt: now + ingestMetadataCacheTtlMs, metadata: undefined };
-      return undefined;
-    }
-
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = JSON.parse(readFileSync(ingestPath, "utf8")) as Record<string, unknown>;
     if (typeof parsed.url !== "string" || typeof parsed.token !== "string") {
       ingestMetadataCache = { expiresAt: now + ingestMetadataCacheTtlMs, metadata: undefined };
       return undefined;
@@ -122,29 +103,21 @@ async function postMetric(metadata: IngestMetadata, metric: MetricEvent): Promis
   }
 }
 
-async function appendJsonl($: Shell, metric: MetricEvent): Promise<void> {
-  const script = [
-    "const fs = require('node:fs');",
-    "const path = require('node:path');",
-    "const target = process.argv[1];",
-    "const line = Buffer.from(process.argv[2], 'base64').toString('utf8');",
-    "fs.mkdirSync(path.dirname(target), { recursive: true });",
-    "fs.appendFileSync(target, line + '\\n');",
-  ].join("\n");
-
-  await $`node -e ${script} ${outputPath} ${Buffer.from(JSON.stringify(metric)).toString("base64")}`;
+function appendJsonl(metric: MetricEvent): void {
+  mkdirSync(dirname(outputPath), { recursive: true });
+  appendFileSync(outputPath, `${JSON.stringify(metric)}\n`);
 }
 
-async function deliverMetric($: Shell, metric: MetricEvent): Promise<void> {
-  const metadata = await readIngestMetadata($);
+async function deliverMetric(metric: MetricEvent): Promise<void> {
+  const metadata = readIngestMetadata();
   if (metadata && await postMetric(metadata, metric)) {
     return;
   }
 
-  await appendJsonl($, metric);
+  appendJsonl(metric);
 }
 
-const plugin: Plugin = async ({ $ }) => {
+const plugin: Plugin = async () => {
   return {
     event: async (event: unknown) => {
       const now = Date.now();
@@ -157,7 +130,7 @@ const plugin: Plugin = async ({ $ }) => {
       if (nextMetric?.snapshot) snapshots.set(metric.id, nextMetric.snapshot);
       pruneSnapshots(now);
 
-      if (nextMetric?.event) await deliverMetric($, nextMetric.event);
+      if (nextMetric?.event) await deliverMetric(nextMetric.event);
     },
   };
 };
