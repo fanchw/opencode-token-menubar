@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build:renderer": "vite build",
-    "build:main": "tsc -p tsconfig.json",
+    "build:main": "tsc -p tsconfig.json && esbuild src/main/preload.ts --bundle --platform=node --format=cjs --outfile=dist/main/preload.cjs --external:electron",
     "build": "bun run build:renderer && bun run build:main",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -28,6 +28,7 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "esbuild": "^0.28.1",
     "typescript": "latest",
     "vite": "latest",
     "vitest": "latest"

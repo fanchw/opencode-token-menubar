@@ -100,12 +100,25 @@ function updateTrayTitle() {
   const data = getDashboardData()
   const recentSpeed = data.recent[0]?.tokensPerSecond
   if (typeof recentSpeed === "number" && recentSpeed > 0) {
-    tray.setTitle(`${Math.round(recentSpeed)} tok/s`)
+    tray.setTitle(`OC ${Math.round(recentSpeed)} tok/s`)
   } else if (data.today.totalTokens > 0) {
-    tray.setTitle(`${Math.round(data.today.totalTokens / 100) / 10}K tok`)
+    tray.setTitle(`OC ${Math.round(data.today.totalTokens / 100) / 10}K tok`)
   } else {
-    tray.setTitle("OpenCode")
+    tray.setTitle("OC")
   }
+}
+
+function createTrayIcon() {
+  const icon = nativeImage.createFromDataURL(
+    `data:image/svg+xml;utf8,${encodeURIComponent(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
+        <path fill="black" d="M4 3h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v8h10V5H4Zm2 2h6v1.5H6V7Zm0 3h4v1.5H6V10Z"/>
+      </svg>
+    `)}`,
+  )
+  icon.setTemplateImage(true)
+
+  return icon
 }
 
 function importNewEvents() {
@@ -150,21 +163,20 @@ function watchMetricEvents() {
 }
 
 function createWindow() {
+  const rendererUrl = process.env.ELECTRON_RENDERER_URL
   window = new BrowserWindow({
     width: 520,
     height: 680,
-    show: false,
+    show: Boolean(rendererUrl),
     frame: false,
     resizable: false,
     webPreferences: {
-      preload: path.join(app.getAppPath(), "dist/main/preload.js"),
+      preload: path.join(app.getAppPath(), "dist/main/preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
     },
   })
 
-  const rendererUrl = process.env.ELECTRON_RENDERER_URL
   if (rendererUrl) {
     void window.loadURL(rendererUrl)
   } else {
@@ -201,6 +213,11 @@ function toggleWindow() {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === "darwin") {
+    app.dock?.hide()
+    app.setActivationPolicy("accessory")
+  }
+
   const userDataPath = app.getPath("userData")
   paths = resolveAppPaths(app.getAppPath(), userDataPath)
   importStatePath = path.join(userDataPath, "import-state.json")
@@ -232,7 +249,8 @@ app.whenReady().then(async () => {
   })
 
   createWindow()
-  tray = new Tray(nativeImage.createEmpty())
+  tray = new Tray(createTrayIcon())
+  tray.setTitle("OC")
   tray.setToolTip("OpenCode Token Menubar")
   tray.on("click", toggleWindow)
   updateTrayTitle()
