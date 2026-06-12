@@ -10,6 +10,13 @@
 | `decisions/` | 决策记录 | [查看索引](decisions/README.md) |
 | `guides/` | 操作指南 | [查看索引](guides/README.md) |
 
+## 快速访问
+
+| 文件 | 说明 |
+|------|------|
+| `project/overview.md` | 项目总览与核心数据流 |
+| `decisions/2026-06-11-opencode-token-metrics.md` | OpenCode token 统计方案决策 |
+
 ## 全局标记
 
 - `@core` — 修改需确认（project/, decisions/ 目录）
