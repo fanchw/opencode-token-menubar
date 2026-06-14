@@ -230,11 +230,13 @@ function buildTrayMenu(): Menu {
   ])
 }
 
-function createTrayIcon() {
-  const iconPath = path.join(app.getAppPath(), "assets/trayIcon.png")
-  const icon = nativeImage.createFromPath(iconPath)
-  icon.setTemplateImage(true)
+// 内嵌 tray 图标 base64，避免 asar 路径问题
+// prettier-ignore
+const trayIconBase64 = "iVBORw0KGgoAAAANSUhEUgAAACwAAAAsCAYAAAAehFoBAAAC/ElEQVR4nOyZvWsUQRjGH087G+U6hVjEKBZBVGJhkzsLPbA4Y6FCivMD7ESxEATjrV4grbZpJIUgFicpBLEw22pQBCs901xhd5g/QI3vy8zevbfszM5udi+s3A8edmZuZ+fJ7LvzlRIKRgkFY2w4bwpneA+yY5I0TZog7dNlm6Qu6StpAxmwXcMnSfOkOpRhG2x4lfSC9Bkp2YV0HCEtkS4hHW3SA9J3JCSN4TukpxHl/PrXSR1ST5eVSVOkGQzCRHKX9AwJSGKYw2eZdD1U/pK0QnoryipavhZTIzVIV0P1n5NukX7DAVfDbPYVaU6UvSM9hOpVhMyuRTzjMcmD6u1F0jnx22vSZTiYdh3WlkNmW6TzEWZtNElbpAu6bkv8NqfbiMWlh8Mx6xJ3nr7OQvV4FFXS8aTPjjPMo8E3kedeeYTkePraDJWz6bOkBVF2FJbRYzfs8Gs6ptMcszeRDl+LO6giyq9B/TEHMBjHD0J9L5HYepgnhU8ifxrJYtZEBcMfpU+6T/ooyk7BMLnYPrp5keahKwuzjA8VCgEV0l7dRlTbQ9gM10V6BdniQw1zAc1QG3VTRVNIcDz90GmewfYjH7ZEmnudx+NgRjyMiAWTqYenRTppKHikP1pezL3VUH7d4KGPyfCESHfgjgf1ektaTdhN+1ChUdXpjsFDH5NhuVDpwZ0FxzKJh8F6o2fw0Oe/2SJtinQZ7rQcy0yUDR76mHYcXZGegjuevgZh0EL8hwdDW92oG3Z6WAvzCymHtQ1xMz+ghvypYWBWtj+E7aNbFekG8qdhaHuInVj8RMG7kG0vfrhCW+QXkR/y2W1YjgHi1sNfSLd1elLfv4ZseUK6IfIXYZms4gxzRR4lgo9uVuc/IBt4+7Uk8jyVt20V4gwzbO4Q6YTO15BNT3PPSrO83b8XV8nFMPMGavUUbJe4p89A7fd+Ihkz2pwMg/ekK6S/cZXzOkiJYqQHKZLCHFVJCnUYKCnMcWsUIznQztLwSBj/UyZvxobz5h8AAAD//6o4IfsAAAAGSURBVAMAJS2e0Q8NpAcAAAAASUVORK5CYII="
 
+function createTrayIcon() {
+  const icon = nativeImage.createFromBuffer(Buffer.from(trayIconBase64, "base64"), { scaleFactor: 2.0 })
+  icon.setTemplateImage(true)
   return icon
 }
 
