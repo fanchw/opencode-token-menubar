@@ -1,17 +1,36 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号 (如 0.1.0)"
+        required: true
+        type: string
 
 jobs:
   release:
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version
+        run: |
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"${{ inputs.version }}\"/" package.json
+          git add package.json
+          git commit -m "release: v${{ inputs.version }}"
+          git tag "v${{ inputs.version }}"
+          git push origin "v${{ inputs.version }}"
+          git push origin main
 
       - name: Install dependencies
         run: bun install
@@ -27,6 +46,8 @@ jobs:
       - name: Upload artifacts
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: "v${{ inputs.version }}"
+          name: "v${{ inputs.version }}"
           files: |
             release/*.dmg
             release/*.zip
