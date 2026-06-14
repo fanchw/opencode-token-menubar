@@ -15,9 +15,11 @@ const baseEvents: MetricEvent[] = [
     model: "claude-sonnet-4",
     inputTokens: 100,
     outputTokens: 50,
+    cacheTokens: 0,
     totalTokens: 150,
     durationMs: 3000,
     tokensPerSecond: 50,
+    firstTokenLatencyMs: null,
   },
   {
     id: "req-2",
@@ -26,9 +28,11 @@ const baseEvents: MetricEvent[] = [
     model: "gpt-4.1",
     inputTokens: 200,
     outputTokens: 100,
+    cacheTokens: 0,
     totalTokens: 300,
     durationMs: 6000,
     tokensPerSecond: 50,
+    firstTokenLatencyMs: null,
   },
   {
     id: "req-3",
@@ -37,9 +41,11 @@ const baseEvents: MetricEvent[] = [
     model: "claude-sonnet-4",
     inputTokens: 10,
     outputTokens: 5,
+    cacheTokens: 0,
     totalTokens: 15,
     durationMs: 1000,
     tokensPerSecond: 15,
+    firstTokenLatencyMs: null,
   },
   {
     id: "req-4",
@@ -48,9 +54,11 @@ const baseEvents: MetricEvent[] = [
     model: "claude-haiku-3.5",
     inputTokens: 40,
     outputTokens: 10,
+    cacheTokens: 0,
     totalTokens: 50,
     durationMs: 2000,
     tokensPerSecond: 25,
+    firstTokenLatencyMs: null,
   },
 ];
 
@@ -96,7 +104,7 @@ describe("MetricsStore", () => {
     const data = metricsStore.getDashboardData({
       start: "2026-06-11T00:00:00.000Z",
       end: "2026-06-12T00:00:00.000Z",
-      recentLimit: 10,
+      recentPageSize: 10,
     });
 
     expect(data.today.requestCount).toBe(1);
@@ -110,7 +118,8 @@ describe("MetricsStore", () => {
     const data = metricsStore.getDashboardData({
       start: "2026-06-11T00:00:00.000Z",
       end: "2026-06-12T00:00:00.000Z",
-      recentLimit: 2,
+      recentPage: 1,
+      recentPageSize: 2,
     });
 
     expect(data.today).toEqual({
@@ -118,6 +127,7 @@ describe("MetricsStore", () => {
       totalTokens: 500,
       inputTokens: 340,
       outputTokens: 160,
+      cacheTokens: 0,
       averageTokensPerSecond: 41.666666666666664,
     });
     expect(data.recent).toEqual([
@@ -128,9 +138,11 @@ describe("MetricsStore", () => {
         model: "claude-haiku-3.5",
         inputTokens: 40,
         outputTokens: 10,
+        cacheTokens: 0,
         totalTokens: 50,
         durationMs: 2000,
         tokensPerSecond: 25,
+        firstTokenLatencyMs: null,
       },
       {
         id: "req-2",
@@ -139,11 +151,14 @@ describe("MetricsStore", () => {
         model: "gpt-4.1",
         inputTokens: 200,
         outputTokens: 100,
+        cacheTokens: 0,
         totalTokens: 300,
         durationMs: 6000,
         tokensPerSecond: 50,
+        firstTokenLatencyMs: null,
       },
     ]);
+    expect(data.recentTotal).toBe(3);
     expect(data.modelRanking).toEqual([
       {
         provider: "openai",
@@ -152,6 +167,7 @@ describe("MetricsStore", () => {
         totalTokens: 300,
         inputTokens: 200,
         outputTokens: 100,
+        cacheTokens: 0,
         averageTokensPerSecond: 50,
       },
       {
@@ -161,6 +177,7 @@ describe("MetricsStore", () => {
         totalTokens: 150,
         inputTokens: 100,
         outputTokens: 50,
+        cacheTokens: 0,
         averageTokensPerSecond: 50,
       },
       {
@@ -170,12 +187,13 @@ describe("MetricsStore", () => {
         totalTokens: 50,
         inputTokens: 40,
         outputTokens: 10,
+        cacheTokens: 0,
         averageTokensPerSecond: 25,
       },
     ]);
     expect(data.hourlyTrends).toEqual([
-      { hour: "2026-06-11T00:00:00.000Z", totalTokens: 150, averageTokensPerSecond: 50 },
-      { hour: "2026-06-11T01:00:00.000Z", totalTokens: 350, averageTokensPerSecond: 37.5 },
+      { hour: "2026-06-11T00:00:00.000Z", totalTokens: 150, inputTokens: 100, outputTokens: 50, cacheTokens: 0, averageTokensPerSecond: 50 },
+      { hour: "2026-06-11T01:00:00.000Z", totalTokens: 350, inputTokens: 240, outputTokens: 110, cacheTokens: 0, averageTokensPerSecond: 37.5 },
     ]);
   });
 
@@ -188,7 +206,7 @@ describe("MetricsStore", () => {
       end: "2026-06-11T02:00:00.000Z",
       providers: ["anthropic"],
       models: ["claude-haiku-3.5"],
-      recentLimit: 10,
+      recentPageSize: 10,
     });
 
     expect(data.today).toEqual({
@@ -196,6 +214,7 @@ describe("MetricsStore", () => {
       totalTokens: 50,
       inputTokens: 40,
       outputTokens: 10,
+      cacheTokens: 0,
       averageTokensPerSecond: 25,
     });
     expect(data.recent.map((event) => event.id)).toEqual(["req-4"]);
@@ -207,11 +226,12 @@ describe("MetricsStore", () => {
         totalTokens: 50,
         inputTokens: 40,
         outputTokens: 10,
+        cacheTokens: 0,
         averageTokensPerSecond: 25,
       },
     ]);
     expect(data.hourlyTrends).toEqual([
-      { hour: "2026-06-11T01:00:00.000Z", totalTokens: 50, averageTokensPerSecond: 25 },
+      { hour: "2026-06-11T01:45:00.000Z", totalTokens: 50, inputTokens: 40, outputTokens: 10, cacheTokens: 0, averageTokensPerSecond: 25 },
     ]);
   });
 
@@ -224,7 +244,7 @@ describe("MetricsStore", () => {
       end: "2026-06-12T00:00:00.000Z",
       providers: ["anthropic"],
       models: ["claude-haiku-3.5"],
-      recentLimit: 10,
+      recentPageSize: 10,
     });
 
     expect(data.providers).toEqual([
@@ -235,5 +255,34 @@ describe("MetricsStore", () => {
       { value: "claude-sonnet-4", requestCount: 1, totalTokens: 150 },
       { value: "claude-haiku-3.5", requestCount: 1, totalTokens: 50 },
     ]);
+  });
+
+  test("getTraySummary returns null speed and zero tokens for empty store", () => {
+    const metricsStore = createStore();
+    const summary = metricsStore.getTraySummary(
+      "2026-06-11T00:00:00.000Z",
+      "2026-06-12T00:00:00.000Z",
+    );
+    expect(summary).toEqual({ latestSpeed: null, totalTokens: 0 });
+  });
+
+  test("getTraySummary returns latest speed and total tokens within range", () => {
+    const metricsStore = createStore();
+    metricsStore.insertEvents(baseEvents);
+    const summary = metricsStore.getTraySummary(
+      "2026-06-11T00:00:00.000Z",
+      "2026-06-12T00:00:00.000Z",
+    );
+    expect(summary).toEqual({ latestSpeed: 25, totalTokens: 500 });
+  });
+
+  test("getTraySummary returns null speed when no data in range", () => {
+    const metricsStore = createStore();
+    metricsStore.insertEvents(baseEvents);
+    const summary = metricsStore.getTraySummary(
+      "2026-06-12T00:00:00.000Z",
+      "2026-06-13T00:00:00.000Z",
+    );
+    expect(summary).toEqual({ latestSpeed: null, totalTokens: 0 });
   });
 });
