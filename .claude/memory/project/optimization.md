@@ -1,7 +1,7 @@
 # 性能优化点
 
 > 审查日期: 2026-06-14
-> 最后更新: 2026-06-14（高优先级 1/2/4 已完成）
+> 最后更新: 2026-06-14（高优先级 1/2 + 中优先级 5/6 已完成）
 
 按影响程度排序。
 
@@ -30,13 +30,13 @@
 
 **完成**：新增 `EventBuffer`（200ms 合并），`insertLocalMetric` 改为 buffer 入口。commit `be201bb` + `223fed5`。
 
-### 3. `getDashboardData` 同步阻塞主进程
+### 3. ✅ `getDashboardData` 同步阻塞主进程（已务实优化）
 
-`src/main/metricsStore.ts:175`：7 次串行 SQL 查询全在主线程同步执行，数据量增大后卡 UI。
+`src/main/metricsStore.ts:175`：6 次串行 SQL 查询全在主线程同步执行，数据量增大后卡 UI。（注：原 7 次，已删 recentTotal 冗余查询降为 6 次；加上 main.ts wrapper 的 3 个 catalog 查询，稳态实际为 6 次，因 catalog 已缓存。）
 
 **方案**：考虑 `worker_threads` 或拆分为增量查询。
 
-> 注：本项仅降低频率（批量合并后触发频率大幅下降），未根治同步阻塞。属下一阶段独立工作。
+**完成**：务实优化（删冗余查询 `cabdc7a` + catalog 缓存 `67214ef`），单次 IPC 稳态从 10 次查询降到 6 次。`worker_threads` / 换 `better-sqlite3` 列为**未来评估项**：当前单用户数据量（10³–10⁵ 行，timestamp 索引）下单次查询成本不构成瓶颈，架构投入不划算。触发阈值：数据量 >10⁵ 行或单次查询 >50ms。
 
 ### 4. ~~SQLite 未开 WAL~~（已放弃）
 
@@ -44,13 +44,13 @@
 
 ## 中优先级
 
-### 5. `recentTotal` 冗余查询
+### 5. ✅ `recentTotal` 冗余查询（已完成）
 
-`src/main/metricsStore.ts:228`：单独 `COUNT(*)` 查询，但 `todaySummary`（:185）已有 `COUNT(*)`，WHERE 条件相同时可合并。
+`src/main/metricsStore.ts`：原单独 `COUNT(*)` 查询，与 `todaySummary` 的 `COUNT(*)` WHERE 完全相同。已删除，复用 `todaySummary.requestCount`。commit `cabdc7a`。
 
-### 6. App.tsx render body 未 memo 化计算
+### 6. ✅ App.tsx render body 未 memo 化计算（已完成）
 
-`src/renderer/App.tsx:309-326`：`filledTrends`、`chartData`、`chartTicks` 每次渲染重算，未用 `useMemo`。任一 state 变化（如 tooltip hover）都触发重算。
+`src/renderer/App.tsx`：`chartData`（含 `filledTrends`/`axisLabelOpts` 内聚）已 `useMemo` 化，tooltip hover 不再触发派生数据重算。`chartTicks` 原已 memo。commit `31ab857`。
 
 ### 7. 全量刷新无增量更新
 
