@@ -8,6 +8,7 @@ import { startIngestServer, type IngestServerHandle } from "./ingestServer.js"
 import { MetricsStore } from "./metricsStore.js"
 import { resolveAppPaths, type AppPaths } from "./paths.js"
 import { installPlugin } from "./pluginInstaller.js"
+import { EventBuffer } from "./eventBuffer.js"
 import { formatTokenUnit } from "../shared/metrics.js"
 import type { DashboardData, DashboardFilters, MetricEvent } from "../shared/metrics.js"
 import { readOpenCodeModels } from "./opencodeModels.js"
@@ -17,6 +18,7 @@ let window: BrowserWindow | null = null
 let store: MetricsStore | null = null
 let watcher: FSWatcher | null = null
 let ingestServer: IngestServerHandle | null = null
+let eventBuffer: EventBuffer | null = null
 let paths: AppPaths | null = null
 let importStatePath: string | null = null
 let jsonlOffset = 0
@@ -176,12 +178,12 @@ function getDashboardData(filters = getDefaultDashboardFilters()): DashboardData
 function updateTrayTitle() {
   if (!tray || !store) return
 
-  const data = getDashboardData()
-  const recentSpeed = data.recent[0]?.tokensPerSecond
-  if (typeof recentSpeed === "number" && recentSpeed > 0) {
-    tray.setTitle(`OC ${Math.round(recentSpeed)}/s`)
-  } else if (data.today.totalTokens > 0) {
-    tray.setTitle(`OC ${formatTokenUnit(data.today.totalTokens)}`)
+  const { dayStart, dayEnd } = getTodayRange()
+  const summary = store.getTraySummary(dayStart, dayEnd)
+  if (summary.latestSpeed != null && summary.latestSpeed > 0) {
+    tray.setTitle(`OC ${Math.round(summary.latestSpeed)}/s`)
+  } else if (summary.totalTokens > 0) {
+    tray.setTitle(`OC ${formatTokenUnit(summary.totalTokens)}`)
   } else {
     tray.setTitle("OC")
   }
@@ -267,13 +269,7 @@ function importNewEvents() {
 }
 
 function insertLocalMetric(event: MetricEvent) {
-  if (!store) {
-    throw new Error("Metrics store is not initialized")
-  }
-
-  store.insertEvents([event])
-  updateTrayTitle()
-  broadcastDashboardUpdated()
+  eventBuffer?.push(event)
 }
 
 function watchMetricEvents() {
@@ -352,6 +348,15 @@ app.whenReady().then(async () => {
   jsonlOffset = importState.jsonlOffset
   importErrors = importState.importErrors
   store = new MetricsStore(paths.sqlitePath)
+  eventBuffer = new EventBuffer({
+    flushMs: 200,
+    onFlush: (events) => {
+      if (!store) return
+      store.insertEvents(events)
+      updateTrayTitle()
+      broadcastDashboardUpdated()
+    },
+  })
   syncModelCatalog()
   try {
     ingestServer = await startIngestServer({
@@ -404,6 +409,9 @@ app.on("before-quit", (event) => {
       } finally {
         ingestServer = null
       }
+
+      eventBuffer?.flush()
+      eventBuffer = null
 
       try {
         store?.close()
