@@ -92,8 +92,35 @@ bun run dist          # 构建 + electron-builder 打包 universal dmg/zip
 注意事项：
 - `electron` 必须在 `devDependencies`（electron-builder 要求）
 - 无代码签名（无 Developer ID），用户首次打开需右键"打开"绕过 Gatekeeper
-- 图标在 `build/icon.icns`（从 SVG 通过 Chrome DevTools canvas 渲染 → iconutil 生成）
+- 应用图标 `assets/icon.icns`，tray 图标用 base64 内嵌 `src/main/main.ts`（44x44 PNG @2x，`scaleFactor: 2.0`，`setTemplateImage(true)`）
 - `release/` 已在 `.gitignore`
+
+### GitHub 发版流程
+
+仓库：https://github.com/fanchw/opencode-token-menubar
+
+**分支策略**：功能分支开发 → PR 合并 main，禁止直接改 main。
+
+**触发发版（三种方式）**：
+
+| 方式 | 操作 | 版本号 |
+|------|------|--------|
+| PR 发版 | PR 加 `release` label → 合并 | 自动递增 patch |
+| 手动发版 | Actions → Release → Run workflow → 填版本号（可选） | 自定义或自动递增，必须 > 当前 |
+| 不发版 | 普通 PR（无 label） | 不触发 |
+
+**CI 自动执行**（`.github/workflows/release.yml`）：
+1. 计算下一个版本号（从 git tag 递增，校验必须大于当前）
+2. 更新 `package.json` version + commit + tag
+3. `bun install` → `bun run build` → `bun run dist`（arm64 + x64）
+4. 发布 dmg/zip 到 GitHub Releases（自动生成 release notes）
+
+**注意事项**：
+- 不再在本地打 tag，全部通过 CI 完成
+- `workflow_dispatch` 可手动填版本号，留空则自动 patch +1
+- CI 配置改动如果在 main 上直接 push，注意不会触发发版（workflow 只监听 PR closed + workflow_dispatch）
+- Actions 版本：`actions/checkout@v5`、`softprops/action-gh-release@v3`（Node.js 24 兼容）
+- `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` 不需要设置，已用 v5/v3 actions
 
 ## 视觉风格
 
@@ -158,4 +185,9 @@ Plugin.event({ type, properties })
 
 - **清理数据前必须征得用户确认**。即使数据部分字段不准确（如 duration=0、TTFT=null），其余字段（token 计数）仍然有效，用户可能希望保留。清数据是不可逆操作，务必先问。
 - **修改插件代码后需手动同步到 `~/.config/opencode/shared/pluginMetric.ts`**。`pluginInstaller.ts` 只在用户点击"安装/重装"时才复制文件，开发期间改了源码不会自动同步到已安装位置。
-- **OpenCode 事件的时间字段可能是 ISO 字符串而非数字**。`eventTime()` 必须同时处理 `number`（毫秒时间戳）和 `string`（ISO 日期）两种格式，否则所有时间解析 fallback 到 `Date.now()`，导致 duration=0、TTFT=null。
+- **OpenCode 事件的时间字段可能是 ISO 字符串而非数字**。`eventTime()` 必须同时处理 `number`（毫秒时间戳）和 `string`（ISO 日期）两种格式。
+- **Vite `base` 必须设为 `"./"`**，否则 Electron `loadFile` 用 `file://` 加载时资源路径为绝对路径 `/assets/...`，导致白屏。
+- **`emptyOutDir` 必须为 `true`**，否则 Vite 不清理旧产物，dist/renderer/assets 堆积上百个旧 hash 文件，app.asar 从 3MB 膨胀到 80MB。
+- **electron-builder 只打包 `dependencies`**，react/recharts 等 Vite 已打包的前端依赖必须放 `devDependencies`，否则打进 app.asar。
+- **tray 图标用 SVG data URL 在 macOS 不渲染**，Chrome headless 截图需精确控制 SVG/HTML/window 尺寸一致 + `--force-device-scale-factor=2`，PNG 需通过 `nativeImage.createFromBuffer(buf, { scaleFactor: 2.0 })` 加载。
+- **`backdrop-filter` 创建 containing block**，modal 内的下拉框不能用 `position: fixed` backdrop，改用 `document.mousedown` 监听外部点击。
