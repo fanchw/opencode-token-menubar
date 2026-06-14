@@ -1,35 +1,55 @@
 name: Release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
-        description: "版本号 (如 0.1.0)"
-        required: true
+        description: "自定义版本号（留空则自动递增 patch）"
+        required: false
         type: string
 
 jobs:
   release:
     runs-on: macos-latest
+    if: "!contains(github.event.head_commit.message, '[skip release]')"
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
 
-      - name: Configure git
+      - name: Compute next version
+        id: version
+        run: |
+          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_NUM="${LATEST#v}"
+          echo "Latest tag: $LATEST"
+
+          if [ -n "${{ inputs.version }}" ]; then
+            NEXT="${{ inputs.version }}"
+          else
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_NUM"
+            NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
+          fi
+
+          echo "Next version: $NEXT"
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version and tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Bump version
-        run: |
-          sed -i '' "s/\"version\": \".*\"/\"version\": \"${{ inputs.version }}\"/" package.json
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"${{ steps.version.outputs.version }}\"/" package.json
           git add package.json
-          git commit -m "release: v${{ inputs.version }}"
-          git tag "v${{ inputs.version }}"
-          git push origin "v${{ inputs.version }}"
+          git commit -m "release: v${{ steps.version.outputs.version }}"
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
           git push origin main
 
       - name: Install dependencies
@@ -46,8 +66,9 @@ jobs:
       - name: Upload artifacts
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v${{ inputs.version }}"
-          name: "v${{ inputs.version }}"
+          tag_name: "v${{ steps.version.outputs.version }}"
+          name: "v${{ steps.version.outputs.version }}"
+          generate_release_notes: true
           files: |
             release/*.dmg
             release/*.zip
