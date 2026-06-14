@@ -86,7 +86,7 @@ bun run build
 
 ## TODO
 
-- **国际化**：支持英文和简体中文。采用轻量内置方案（`t(key)` 字典函数，0 依赖），key 结构和字典 JSON 与 i18next 保持一致，便于后续无缝迁移到 `react-i18next`。
+- （暂无）
 
 ## Release / 发布流程
 

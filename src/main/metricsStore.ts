@@ -34,6 +34,14 @@ export function chooseTrendInterval(startMs: number, endMs: number): number {
   return 86400;
 }
 
+const VALID_TREND_INTERVALS = new Set([60, 300, 3600, 21600, 86400]);
+
+function assertValidTrendInterval(seconds: number): void {
+  if (!VALID_TREND_INTERVALS.has(seconds)) {
+    throw new Error(`Invalid trend interval: ${seconds}`);
+  }
+}
+
 interface SummaryRow {
   requestCount: number | null;
   totalTokens: number | null;
@@ -191,17 +199,49 @@ export class MetricsStore {
     return rows.map((row) => row.value);
   }
 
-  getDashboardData({ start, end, providers, models, recentPage, recentPageSize }: DashboardQuery): DashboardData {
-    const dashboardFilters = this.buildFilterClause(start, end, providers, models);
-    const providerOptionFilters = this.buildFilterClause(start, end);
-    const modelOptionFilters = this.buildFilterClause(start, end, providers);
+  getTrends({ start, end, providers, models }: DashboardQuery): {
+    trends: import("../shared/metrics.js").HourlyTrendRow[];
+    trendIntervalSeconds: number;
+  } {
+    const filters = this.buildFilterClause(start, end, providers, models);
+    const trendIntervalSeconds = chooseTrendInterval(
+      new Date(start).getTime(),
+      new Date(end).getTime(),
+    );
+    assertValidTrendInterval(trendIntervalSeconds);
 
-    const page = typeof recentPage === "number" && recentPage >= 1 ? Math.floor(recentPage) : 1;
-    const pageSize =
-      typeof recentPageSize === "number" && recentPageSize >= 1 ? Math.floor(recentPageSize) : 50;
-    const offset = (page - 1) * pageSize;
+    const trendBuckets = this.database.all(
+      `
+        SELECT
+          (CAST(strftime('%s', timestamp) AS INTEGER) / ${trendIntervalSeconds}) * ${trendIntervalSeconds} AS bucketEpoch,
+          SUM(tokens) AS totalTokens,
+          SUM(inputTokens) AS inputTokens,
+          SUM(outputTokens) AS outputTokens,
+          SUM(cacheTokens) AS cacheTokens,
+          AVG(speed) AS averageTokensPerSecond
+        FROM requests
+        ${filters.whereClause}
+        GROUP BY bucketEpoch
+        ORDER BY bucketEpoch ASC
+      `,
+      filters.values,
+    ) as TrendBucket[];
 
-    const todaySummary = this.database.get(
+    const trends = trendBuckets.map((bucket) => ({
+      hour: new Date(bucket.bucketEpoch * 1000).toISOString(),
+      totalTokens: bucket.totalTokens,
+      inputTokens: bucket.inputTokens,
+      outputTokens: bucket.outputTokens,
+      cacheTokens: bucket.cacheTokens,
+      averageTokensPerSecond: bucket.averageTokensPerSecond,
+    }));
+
+    return { trends, trendIntervalSeconds };
+  }
+
+  getSummary({ start, end, providers, models }: DashboardQuery): import("../shared/metrics.js").TodaySummary {
+    const filters = this.buildFilterClause(start, end, providers, models);
+    const row = this.database.get(
       `
         SELECT
           COUNT(*) AS requestCount,
@@ -211,19 +251,32 @@ export class MetricsStore {
           COALESCE(SUM(cacheTokens), 0) AS cacheTokens,
           COALESCE(AVG(speed), 0) AS averageTokensPerSecond
         FROM requests
-        ${dashboardFilters.whereClause}
+        ${filters.whereClause}
       `,
-      dashboardFilters.values,
-    ) as SummaryRow | undefined ?? {
-      requestCount: 0,
-      totalTokens: 0,
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheTokens: 0,
-      averageTokensPerSecond: 0,
-    };
+      filters.values,
+    ) as SummaryRow | undefined;
 
-    const recent = this.database.all(
+    return {
+      requestCount: row?.requestCount ?? 0,
+      totalTokens: row?.totalTokens ?? 0,
+      inputTokens: row?.inputTokens ?? 0,
+      outputTokens: row?.outputTokens ?? 0,
+      cacheTokens: row?.cacheTokens ?? 0,
+      averageTokensPerSecond: row?.averageTokensPerSecond ?? 0,
+    };
+  }
+
+  getRecent({ start, end, providers, models, recentPage, recentPageSize }: DashboardQuery): {
+    rows: import("../shared/metrics.js").MetricEvent[];
+    total: number;
+  } {
+    const filters = this.buildFilterClause(start, end, providers, models);
+    const page = typeof recentPage === "number" && recentPage >= 1 ? Math.floor(recentPage) : 1;
+    const pageSize =
+      typeof recentPageSize === "number" && recentPageSize >= 1 ? Math.floor(recentPageSize) : 50;
+    const offset = (page - 1) * pageSize;
+
+    const rows = this.database.all(
       `
         SELECT id,
           timestamp,
@@ -237,16 +290,24 @@ export class MetricsStore {
           duration AS durationMs,
           speed AS tokensPerSecond
         FROM requests
-        ${dashboardFilters.whereClause}
+        ${filters.whereClause}
         ORDER BY timestamp DESC
         LIMIT ? OFFSET ?
       `,
-      [...dashboardFilters.values, pageSize, offset],
-    ) as DashboardData["recent"];
+      [...filters.values, pageSize, offset],
+    ) as import("../shared/metrics.js").MetricEvent[];
 
-    const recentTotal = todaySummary.requestCount ?? 0;
+    const countRow = this.database.get(
+      `SELECT COUNT(*) AS count FROM requests ${filters.whereClause}`,
+      filters.values,
+    ) as { count: number } | undefined;
 
-    const modelRanking = this.database.all(
+    return { rows, total: countRow?.count ?? 0 };
+  }
+
+  getRanking({ start, end, providers, models }: DashboardQuery): import("../shared/metrics.js").ModelRankingRow[] {
+    const filters = this.buildFilterClause(start, end, providers, models);
+    return this.database.all(
       `
         SELECT provider,
           model,
@@ -257,41 +318,20 @@ export class MetricsStore {
           SUM(cacheTokens) AS cacheTokens,
           AVG(speed) AS averageTokensPerSecond
         FROM requests
-        ${dashboardFilters.whereClause}
+        ${filters.whereClause}
         GROUP BY provider, model
         ORDER BY totalTokens DESC, requestCount DESC, provider ASC, model ASC
       `,
-      dashboardFilters.values,
-    ) as DashboardData["modelRanking"];
+      filters.values,
+    ) as import("../shared/metrics.js").ModelRankingRow[];
+  }
 
-    const trendIntervalSeconds = chooseTrendInterval(
-      new Date(start).getTime(),
-      new Date(end).getTime(),
-    );
-    const trendBuckets = this.database.all(
-      `
-        SELECT
-          (CAST(strftime('%s', timestamp) AS INTEGER) / ${trendIntervalSeconds}) * ${trendIntervalSeconds} AS bucketEpoch,
-          SUM(tokens) AS totalTokens,
-          SUM(inputTokens) AS inputTokens,
-          SUM(outputTokens) AS outputTokens,
-          SUM(cacheTokens) AS cacheTokens,
-          AVG(speed) AS averageTokensPerSecond
-        FROM requests
-        ${dashboardFilters.whereClause}
-        GROUP BY bucketEpoch
-        ORDER BY bucketEpoch ASC
-      `,
-      dashboardFilters.values,
-    ) as TrendBucket[];
-    const hourlyTrends = trendBuckets.map((bucket) => ({
-      hour: new Date(bucket.bucketEpoch * 1000).toISOString(),
-      totalTokens: bucket.totalTokens,
-      inputTokens: bucket.inputTokens,
-      outputTokens: bucket.outputTokens,
-      cacheTokens: bucket.cacheTokens,
-      averageTokensPerSecond: bucket.averageTokensPerSecond,
-    }));
+  getFilterOptions({ start, end, providers }: DashboardQuery): {
+    providers: import("../shared/metrics.js").FilterOption[];
+    models: import("../shared/metrics.js").FilterOption[];
+  } {
+    const providerFilters = this.buildFilterClause(start, end);
+    const modelFilters = this.buildFilterClause(start, end, providers);
 
     const providerOptions = this.database.all(
       `
@@ -299,12 +339,12 @@ export class MetricsStore {
           COUNT(*) AS requestCount,
           SUM(tokens) AS totalTokens
         FROM requests
-        ${providerOptionFilters.whereClause}
+        ${providerFilters.whereClause}
         GROUP BY provider
         ORDER BY totalTokens DESC, requestCount DESC, value ASC
       `,
-      providerOptionFilters.values,
-    ) as DashboardData["providers"];
+      providerFilters.values,
+    ) as import("../shared/metrics.js").FilterOption[];
 
     const modelOptions = this.database.all(
       `
@@ -312,29 +352,32 @@ export class MetricsStore {
           COUNT(*) AS requestCount,
           SUM(tokens) AS totalTokens
         FROM requests
-        ${modelOptionFilters.whereClause}
+        ${modelFilters.whereClause}
         GROUP BY model
         ORDER BY totalTokens DESC, requestCount DESC, value ASC
       `,
-      modelOptionFilters.values,
-    ) as DashboardData["models"];
+      modelFilters.values,
+    ) as import("../shared/metrics.js").FilterOption[];
+
+    return { providers: providerOptions, models: modelOptions };
+  }
+
+  getDashboardData(query: DashboardQuery): DashboardData {
+    const summary = this.getSummary(query);
+    const recent = this.getRecent(query);
+    const modelRanking = this.getRanking(query);
+    const { trends: hourlyTrends, trendIntervalSeconds } = this.getTrends(query);
+    const { providers, models } = this.getFilterOptions(query);
 
     return {
-      today: {
-        requestCount: todaySummary.requestCount ?? 0,
-        totalTokens: todaySummary.totalTokens ?? 0,
-        inputTokens: todaySummary.inputTokens ?? 0,
-        outputTokens: todaySummary.outputTokens ?? 0,
-        cacheTokens: todaySummary.cacheTokens ?? 0,
-        averageTokensPerSecond: todaySummary.averageTokensPerSecond ?? 0,
-      },
-      recent,
-      recentTotal,
+      today: summary,
+      recent: recent.rows,
+      recentTotal: recent.total,
       modelRanking,
       hourlyTrends,
       trendIntervalSeconds,
-      providers: providerOptions,
-      models: modelOptions,
+      providers,
+      models,
     };
   }
 

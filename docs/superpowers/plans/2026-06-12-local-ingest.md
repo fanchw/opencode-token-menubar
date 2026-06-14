@@ -1,5 +1,7 @@
 # Local Ingest Implementation Plan
 
+> 状态: ✅ 已完成
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Send OpenCode plugin metric events to the menubar app through a local ingest service, with JSONL only as a fallback queue.

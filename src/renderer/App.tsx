@@ -36,6 +36,7 @@ export default function App() {
   const isInstallingRef = useRef(false)
   const latestFiltersRef = useRef<DashboardFilters | null>(null)
   const debounceTimerRef = useRef<number | null>(null)
+  const updateCountRef = useRef(0)
 
   const filters = useMemo<DashboardFilters>(() => {
     const range = customRange ?? resolveQuickRange(quickRange, new Date(), timezone)
@@ -74,17 +75,76 @@ export default function App() {
     }
   }, [])
 
+  const refreshSummary = useCallback(async (nextFilters: DashboardFilters) => {
+    if (!mountedRef.current || inFlightRef.current) return
+
+    inFlightRef.current = true
+    try {
+      const [summary, recent] = await Promise.all([
+        window.tokenMetrics.getSummary(nextFilters),
+        window.tokenMetrics.getRecent(nextFilters),
+      ])
+      if (mountedRef.current) {
+        setDashboard((prev) => prev ? {
+          ...prev,
+          today: summary.today,
+          providers: summary.providers,
+          models: summary.models,
+          modelProviders: summary.modelProviders,
+          importErrors: summary.importErrors,
+          pluginInstalled: summary.pluginInstalled,
+          paths: summary.paths,
+          recent: recent.rows,
+          recentTotal: recent.total,
+        } : null)
+        setError(null)
+      }
+    } catch (caughtError) {
+      if (mountedRef.current) {
+        setError(caughtError instanceof Error ? caughtError.message : t("notice.unableLoad"))
+      }
+    } finally {
+      inFlightRef.current = false
+    }
+  }, [])
+
+  const refreshHeavy = useCallback(async (nextFilters: DashboardFilters) => {
+    if (!mountedRef.current) return
+
+    try {
+      const [ranking, trends] = await Promise.all([
+        window.tokenMetrics.getRanking(nextFilters),
+        window.tokenMetrics.getTrends(nextFilters),
+      ])
+      if (mountedRef.current) {
+        setDashboard((prev) => prev ? {
+          ...prev,
+          modelRanking: ranking,
+          hourlyTrends: trends.trends,
+          trendIntervalSeconds: trends.trendIntervalSeconds,
+        } : null)
+      }
+    } catch {
+      // heavy refresh 失败不阻塞 UI
+    }
+  }, [])
+
   useEffect(() => {
     mountedRef.current = true
-    const unsubscribe = window.tokenMetrics.onDashboardUpdated(() => {
+    const unsubscribe = window.tokenMetrics.onDashboardUpdated((payload) => {
       if (debounceTimerRef.current !== null) {
         window.clearTimeout(debounceTimerRef.current)
       }
       debounceTimerRef.current = window.setTimeout(() => {
         debounceTimerRef.current = null
         const nextFilters = latestFiltersRef.current
-        if (nextFilters) {
-          void refreshDashboard(nextFilters)
+        if (!nextFilters) return
+
+        updateCountRef.current += 1
+        void refreshSummary(nextFilters)
+
+        if (updateCountRef.current % 5 === 0) {
+          void refreshHeavy(nextFilters)
         }
       }, debounceMs)
     })
@@ -96,10 +156,11 @@ export default function App() {
       }
       unsubscribe()
     }
-  }, [refreshDashboard])
+  }, [refreshDashboard, refreshSummary, refreshHeavy])
 
   useEffect(() => {
     latestFiltersRef.current = filters
+    updateCountRef.current = 0
     void refreshDashboard(filters)
   }, [filters, refreshDashboard])
 

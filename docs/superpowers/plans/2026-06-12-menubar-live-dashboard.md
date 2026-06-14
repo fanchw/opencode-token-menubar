@@ -1,5 +1,7 @@
 # Menubar Live Dashboard Implementation Plan
 
+> 状态: ✅ 已完成
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a reliable macOS menubar dashboard with event-driven refresh, filterable analytics, timezone-aware display, compact token units, and a `Midnight Terminal` UI.

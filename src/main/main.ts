@@ -10,20 +10,36 @@ import { resolveAppPaths, type AppPaths } from "./paths.js"
 import { installPlugin } from "./pluginInstaller.js"
 import { EventBuffer } from "./eventBuffer.js"
 import { formatTokenUnit } from "../shared/metrics.js"
-import type { DashboardData, DashboardFilters, MetricEvent } from "../shared/metrics.js"
+import type { DashboardData, DashboardFilters, MetricEvent, SummaryResponse, DashboardUpdatePayload } from "../shared/metrics.js"
 import { readOpenCodeModels } from "./opencodeModels.js"
 
-let tray: Tray | null = null
-let window: BrowserWindow | null = null
-let store: MetricsStore | null = null
-let watcher: FSWatcher | null = null
-let ingestServer: IngestServerHandle | null = null
-let eventBuffer: EventBuffer | null = null
-let paths: AppPaths | null = null
-let importStatePath: string | null = null
-let jsonlOffset = 0
-let importErrors = 0
-let isShuttingDown = false
+interface AppState {
+  tray: Tray | null
+  window: BrowserWindow | null
+  store: MetricsStore | null
+  watcher: FSWatcher | null
+  ingestServer: IngestServerHandle | null
+  eventBuffer: EventBuffer | null
+  paths: AppPaths | null
+  importStatePath: string | null
+  jsonlOffset: number
+  importErrors: number
+  isShuttingDown: boolean
+}
+
+const state: AppState = {
+  tray: null,
+  window: null,
+  store: null,
+  watcher: null,
+  ingestServer: null,
+  eventBuffer: null,
+  paths: null,
+  importStatePath: null,
+  jsonlOffset: 0,
+  importErrors: 0,
+  isShuttingDown: false,
+}
 
 interface ImportState {
   jsonlOffset: number
@@ -50,27 +66,30 @@ function readImportState(filePath: string): ImportState {
 }
 
 function writeImportState() {
-  if (!importStatePath) return
+  if (!state.importStatePath) return
 
-  mkdirSync(dirname(importStatePath), { recursive: true })
-  writeFileSync(importStatePath, JSON.stringify({ jsonlOffset, importErrors }, null, 2))
+  mkdirSync(dirname(state.importStatePath), { recursive: true })
+  writeFileSync(
+    state.importStatePath,
+    JSON.stringify({ jsonlOffset: state.jsonlOffset, importErrors: state.importErrors }, null, 2),
+  )
 }
 
 function getDashboardPaths() {
-  if (!paths) {
+  if (!state.paths) {
     throw new Error("App paths are not initialized")
   }
 
   return {
-    jsonlPath: paths.jsonlPath,
-    ingestPath: paths.ingestPath,
-    sqlitePath: paths.sqlitePath,
-    pluginPath: paths.pluginPath,
+    jsonlPath: state.paths.jsonlPath,
+    ingestPath: state.paths.ingestPath,
+    sqlitePath: state.paths.sqlitePath,
+    pluginPath: state.paths.pluginPath,
   }
 }
 
 function isPluginInstalled() {
-  return paths ? existsSync(paths.pluginPath) : false
+  return state.paths ? existsSync(state.paths.pluginPath) : false
 }
 
 function getTodayRange() {
@@ -89,10 +108,10 @@ function getDefaultDashboardFilters(): DashboardFilters {
   return { start: dayStart, end: dayEnd }
 }
 
-function broadcastDashboardUpdated() {
-  if (!window || window.isDestroyed() || window.webContents.isDestroyed()) return
+function broadcastDashboardUpdated(payload: DashboardUpdatePayload = { reason: "new-data" }) {
+  if (!state.window || state.window.isDestroyed() || state.window.webContents.isDestroyed()) return
 
-  window.webContents.send("metrics:dashboard-updated")
+  state.window.webContents.send("metrics:dashboard-updated", payload)
 }
 
 function normalizeDashboardFilters(filters: unknown): DashboardFilters {
@@ -134,11 +153,11 @@ function normalizeDashboardFilters(filters: unknown): DashboardFilters {
 }
 
 function syncModelCatalog() {
-  if (!store) return
+  if (!state.store) return
   try {
     const entries = readOpenCodeModels()
     if (entries.length) {
-      store.syncCatalog(entries)
+      state.store.syncCatalog(entries)
     }
   } catch {
     // opencode 命令不可用，跳过
@@ -146,20 +165,20 @@ function syncModelCatalog() {
 }
 
 function getDashboardData(filters = getDefaultDashboardFilters()): DashboardData {
-  if (!store || !paths) {
+  if (!state.store || !state.paths) {
     throw new Error("Metrics store is not initialized")
   }
 
-  const data = store.getDashboardData(filters)
+  const data = state.store.getDashboardData(filters)
 
   const knownProviders = new Set(data.providers.map((option) => option.value))
-  const catalogProviders = store
+  const catalogProviders = state.store
     .getCatalogProviders()
     .filter((value) => !knownProviders.has(value))
     .map((value) => ({ value, requestCount: 0, totalTokens: 0 }))
 
   const knownModels = new Set(data.models.map((option) => option.value))
-  const catalogModels = store
+  const catalogModels = state.store
     .getCatalogModels()
     .filter((value) => !knownModels.has(value))
     .map((value) => ({ value, requestCount: 0, totalTokens: 0 }))
@@ -168,38 +187,69 @@ function getDashboardData(filters = getDefaultDashboardFilters()): DashboardData
     ...data,
     providers: [...data.providers, ...catalogProviders],
     models: [...data.models, ...catalogModels],
-    modelProviders: store.getModelProviderMap(),
-    importErrors,
+    modelProviders: state.store.getModelProviderMap(),
+    importErrors: state.importErrors,
+    pluginInstalled: isPluginInstalled(),
+    paths: getDashboardPaths(),
+  }
+}
+
+function getSummaryData(filters = getDefaultDashboardFilters()): SummaryResponse {
+  if (!state.store || !state.paths) {
+    throw new Error("Metrics store is not initialized")
+  }
+
+  const summary = state.store.getSummary(filters)
+  const { providers: dataProviders, models: dataModels } = state.store.getFilterOptions(filters)
+
+  const knownProviders = new Set(dataProviders.map((option) => option.value))
+  const catalogProviders = state.store
+    .getCatalogProviders()
+    .filter((value) => !knownProviders.has(value))
+    .map((value) => ({ value, requestCount: 0, totalTokens: 0 }))
+
+  const knownModels = new Set(dataModels.map((option) => option.value))
+  const catalogModels = state.store
+    .getCatalogModels()
+    .filter((value) => !knownModels.has(value))
+    .map((value) => ({ value, requestCount: 0, totalTokens: 0 }))
+
+  return {
+    today: summary,
+    providers: [...dataProviders, ...catalogProviders],
+    models: [...dataModels, ...catalogModels],
+    modelProviders: state.store.getModelProviderMap(),
+    importErrors: state.importErrors,
     pluginInstalled: isPluginInstalled(),
     paths: getDashboardPaths(),
   }
 }
 
 function updateTrayTitle() {
-  if (!tray || !store) return
+  if (!state.tray || !state.store) return
 
   const { dayStart, dayEnd } = getTodayRange()
-  const summary = store.getTraySummary(dayStart, dayEnd)
+  const summary = state.store.getTraySummary(dayStart, dayEnd)
   if (summary.latestSpeed != null && summary.latestSpeed > 0) {
-    tray.setToolTip(`OpenCode · ${Math.round(summary.latestSpeed)} tok/s · ${formatTokenUnit(summary.totalTokens)} today`)
+    state.tray.setToolTip(`OpenCode · ${Math.round(summary.latestSpeed)} tok/s · ${formatTokenUnit(summary.totalTokens)} today`)
   } else if (summary.totalTokens > 0) {
-    tray.setToolTip(`OpenCode · ${formatTokenUnit(summary.totalTokens)} today`)
+    state.tray.setToolTip(`OpenCode · ${formatTokenUnit(summary.totalTokens)} today`)
   } else {
-    tray.setToolTip("OpenCode Token Menubar")
+    state.tray.setToolTip("OpenCode Token Menubar")
   }
 }
 
 async function installGlobalPlugin() {
-  if (!paths) {
+  if (!state.paths) {
     throw new Error("App paths are not initialized")
   }
 
   const result = await installPlugin({
-    sourcePath: paths.bundledPluginPath,
-    targetPath: paths.pluginPath,
-    sharedSourcePath: paths.bundledPluginSharedPath,
-    sharedTargetPath: paths.pluginSharedPath,
-    configPath: paths.configPath,
+    sourcePath: state.paths.bundledPluginPath,
+    targetPath: state.paths.pluginPath,
+    sharedSourcePath: state.paths.bundledPluginSharedPath,
+    sharedTargetPath: state.paths.pluginSharedPath,
+    configPath: state.paths.configPath,
   })
   broadcastDashboardUpdated()
 
@@ -241,20 +291,20 @@ function createTrayIcon() {
 }
 
 function importNewEvents() {
-  if (!store || !paths) return false
+  if (!state.store || !state.paths) return false
 
-  const previousOffset = jsonlOffset
-  const result = readJsonlEvents(paths.jsonlPath, jsonlOffset)
+  const previousOffset = state.jsonlOffset
+  const result = readJsonlEvents(state.paths.jsonlPath, state.jsonlOffset)
   const nextOffset = result.nextOffset
-  importErrors += result.errors
+  state.importErrors += result.errors
   if (result.events.length > 0) {
-    store.insertEvents(result.events)
+    state.store.insertEvents(result.events)
     broadcastDashboardUpdated()
   }
-  jsonlOffset = nextOffset
+  state.jsonlOffset = nextOffset
   if (nextOffset > previousOffset) {
-    compactJsonlFile(paths.jsonlPath, nextOffset)
-    jsonlOffset = 0
+    compactJsonlFile(state.paths.jsonlPath, nextOffset)
+    state.jsonlOffset = 0
   }
   writeImportState()
   updateTrayTitle()
@@ -263,25 +313,25 @@ function importNewEvents() {
 }
 
 function insertLocalMetric(event: MetricEvent) {
-  eventBuffer?.push(event)
+  state.eventBuffer?.push(event)
 }
 
 function watchMetricEvents() {
-  if (!paths) return
+  if (!state.paths) return
 
-  void watcher?.close()
-  mkdirSync(dirname(paths.jsonlPath), { recursive: true })
-  watcher = chokidar.watch(paths.jsonlPath, {
+  void state.watcher?.close()
+  mkdirSync(dirname(state.paths.jsonlPath), { recursive: true })
+  state.watcher = chokidar.watch(state.paths.jsonlPath, {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 25 },
   })
-  watcher.on("add", importNewEvents)
-  watcher.on("change", importNewEvents)
+  state.watcher.on("add", importNewEvents)
+  state.watcher.on("change", importNewEvents)
 }
 
 function createWindow() {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL
-  window = new BrowserWindow({
+  state.window = new BrowserWindow({
     width: 520,
     height: 680,
     show: Boolean(rendererUrl),
@@ -294,30 +344,30 @@ function createWindow() {
     },
   })
 
-  window.on("blur", () => {
+  state.window.on("blur", () => {
     setTimeout(() => {
-      if (window?.isVisible() && !window.isFocused()) {
-        window.hide()
+      if (state.window?.isVisible() && !state.window.isFocused()) {
+        state.window.hide()
       }
     }, 150)
   })
 
   if (rendererUrl) {
-    void window.loadURL(rendererUrl)
+    void state.window.loadURL(rendererUrl)
   } else {
-    void window.loadFile(path.join(app.getAppPath(), "dist/renderer/index.html"))
+    void state.window.loadFile(path.join(app.getAppPath(), "dist/renderer/index.html"))
   }
 }
 
 function toggleWindow() {
-  if (!window || !tray) return
-  if (window.isVisible()) {
-    window.hide()
+  if (!state.window || !state.tray) return
+  if (state.window.isVisible()) {
+    state.window.hide()
     return
   }
 
-  const trayBounds = tray.getBounds()
-  const windowBounds = window.getBounds()
+  const trayBounds = state.tray.getBounds()
+  const windowBounds = state.window.getBounds()
   const display = screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y })
   const { x, y, width, height } = display.workArea
   const nextX = Math.min(
@@ -329,12 +379,12 @@ function toggleWindow() {
     y + height - windowBounds.height,
   )
 
-  window.setPosition(
+  state.window.setPosition(
     nextX,
     nextY,
     false,
   )
-  window.show()
+  state.window.show()
 }
 
 app.whenReady().then(async () => {
@@ -348,25 +398,25 @@ app.whenReady().then(async () => {
   }
 
   const userDataPath = app.getPath("userData")
-  paths = resolveAppPaths(app.getAppPath(), userDataPath)
-  importStatePath = path.join(userDataPath, "import-state.json")
-  const importState = readImportState(importStatePath)
-  jsonlOffset = importState.jsonlOffset
-  importErrors = importState.importErrors
-  store = new MetricsStore(paths.sqlitePath)
-  eventBuffer = new EventBuffer({
+  state.paths = resolveAppPaths(app.getAppPath(), userDataPath)
+  state.importStatePath = path.join(userDataPath, "import-state.json")
+  const importState = readImportState(state.importStatePath)
+  state.jsonlOffset = importState.jsonlOffset
+  state.importErrors = importState.importErrors
+  state.store = new MetricsStore(state.paths.sqlitePath)
+  state.eventBuffer = new EventBuffer({
     flushMs: 200,
     onFlush: (events) => {
-      if (!store) return
-      store.insertEvents(events)
+      if (!state.store) return
+      state.store.insertEvents(events)
       updateTrayTitle()
       broadcastDashboardUpdated()
     },
   })
   syncModelCatalog()
   try {
-    ingestServer = await startIngestServer({
-      ingestPath: paths.ingestPath,
+    state.ingestServer = await startIngestServer({
+      ingestPath: state.paths.ingestPath,
       onMetric: insertLocalMetric,
     })
   } catch (error) {
@@ -378,13 +428,28 @@ app.whenReady().then(async () => {
   ipcMain.handle("metrics:get-dashboard-data", (_event, filters: unknown) => {
     return getDashboardData(normalizeDashboardFilters(filters))
   })
+  ipcMain.handle("metrics:get-summary", (_event, filters: unknown) => {
+    return getSummaryData(normalizeDashboardFilters(filters))
+  })
+  ipcMain.handle("metrics:get-recent", (_event, filters: unknown) => {
+    if (!state.store) throw new Error("Metrics store is not initialized")
+    return state.store.getRecent(normalizeDashboardFilters(filters))
+  })
+  ipcMain.handle("metrics:get-ranking", (_event, filters: unknown) => {
+    if (!state.store) throw new Error("Metrics store is not initialized")
+    return state.store.getRanking(normalizeDashboardFilters(filters))
+  })
+  ipcMain.handle("metrics:get-trends", (_event, filters: unknown) => {
+    if (!state.store) throw new Error("Metrics store is not initialized")
+    return state.store.getTrends(normalizeDashboardFilters(filters))
+  })
   ipcMain.handle("plugin:install", () => installGlobalPlugin())
 
   createWindow()
-  tray = new Tray(createTrayIcon())
-  tray.setToolTip("OpenCode Token Menubar")
-  tray.on("click", toggleWindow)
-  tray.on("right-click", () => tray?.popUpContextMenu(buildTrayMenu()))
+  state.tray = new Tray(createTrayIcon())
+  state.tray.setToolTip("OpenCode Token Menubar")
+  state.tray.on("click", toggleWindow)
+  state.tray.on("right-click", () => state.tray?.popUpContextMenu(buildTrayMenu()))
   updateTrayTitle()
 })
 
@@ -392,38 +457,38 @@ app.on("window-all-closed", () => {
 })
 
 app.on("before-quit", (event) => {
-  if (isShuttingDown) return
+  if (state.isShuttingDown) return
 
   event.preventDefault()
-  isShuttingDown = true
+  state.isShuttingDown = true
 
   void (async () => {
     try {
       try {
-        await watcher?.close()
+        await state.watcher?.close()
       } catch (error) {
         console.warn("Failed to close metrics watcher", error)
       } finally {
-        watcher = null
+        state.watcher = null
       }
 
       try {
-        await ingestServer?.stop()
+        await state.ingestServer?.stop()
       } catch (error) {
         console.warn("Failed to stop ingest server", error)
       } finally {
-        ingestServer = null
+        state.ingestServer = null
       }
 
-      eventBuffer?.flush()
-      eventBuffer = null
+      state.eventBuffer?.flush()
+      state.eventBuffer = null
 
       try {
-        store?.close()
+        state.store?.close()
       } catch (error) {
         console.warn("Failed to close metrics store", error)
       } finally {
-        store = null
+        state.store = null
       }
     } finally {
       app.quit()
