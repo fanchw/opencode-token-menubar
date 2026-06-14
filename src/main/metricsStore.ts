@@ -66,6 +66,7 @@ export class MetricsStore {
   constructor(databasePath: string, DatabaseCtor: DatabaseConstructor = MetricsStore.DatabaseConstructor) {
     mkdirSync(dirname(databasePath), { recursive: true });
     this.database = new DatabaseCtor(databasePath);
+    this.database.exec("PRAGMA busy_timeout=5000");
     this.initializeSchema();
   }
 

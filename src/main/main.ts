@@ -336,6 +336,10 @@ function toggleWindow() {
 }
 
 app.whenReady().then(async () => {
+  if (process.env.ELECTRON_RENDERER_URL) {
+    app.setName("opencode-token-menubar-dev")
+  }
+
   if (process.platform === "darwin") {
     app.dock?.hide()
     app.setActivationPolicy("accessory")
