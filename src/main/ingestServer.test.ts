@@ -58,9 +58,11 @@ describe("startIngestServer", () => {
           model: "claude-sonnet-4",
           inputTokens: 120,
           outputTokens: 80,
+          cacheTokens: 0,
           totalTokens: 200,
           durationMs: 5000,
           tokensPerSecond: 40,
+          firstTokenLatencyMs: null,
         },
       ]);
     } finally {

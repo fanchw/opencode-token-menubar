@@ -10,6 +10,7 @@ import { resolveAppPaths, type AppPaths } from "./paths.js"
 import { installPlugin } from "./pluginInstaller.js"
 import { formatTokenUnit } from "../shared/metrics.js"
 import type { DashboardData, DashboardFilters, MetricEvent } from "../shared/metrics.js"
+import { readOpenCodeModels } from "./opencodeModels.js"
 
 let tray: Tray | null = null
 let window: BrowserWindow | null = null
@@ -118,8 +119,28 @@ function normalizeDashboardFilters(filters: unknown): DashboardFilters {
       (model): model is string => typeof model === "string",
     )
   }
+  const rawPage = (filters as Partial<DashboardFilters>).recentPage
+  if (typeof rawPage === "number" && Number.isFinite(rawPage) && rawPage >= 1) {
+    normalized.recentPage = Math.floor(rawPage)
+  }
+  const rawPageSize = (filters as Partial<DashboardFilters>).recentPageSize
+  if (typeof rawPageSize === "number" && Number.isFinite(rawPageSize) && rawPageSize >= 1) {
+    normalized.recentPageSize = Math.floor(rawPageSize)
+  }
 
   return normalized
+}
+
+function syncModelCatalog() {
+  if (!store) return
+  try {
+    const entries = readOpenCodeModels()
+    if (entries.length) {
+      store.syncCatalog(entries)
+    }
+  } catch {
+    // opencode 命令不可用，跳过
+  }
 }
 
 function getDashboardData(filters = getDefaultDashboardFilters()): DashboardData {
@@ -127,10 +148,25 @@ function getDashboardData(filters = getDefaultDashboardFilters()): DashboardData
     throw new Error("Metrics store is not initialized")
   }
 
-  const data = store.getDashboardData({ ...filters, recentLimit: 50 })
+  const data = store.getDashboardData(filters)
+
+  const knownProviders = new Set(data.providers.map((option) => option.value))
+  const catalogProviders = store
+    .getCatalogProviders()
+    .filter((value) => !knownProviders.has(value))
+    .map((value) => ({ value, requestCount: 0, totalTokens: 0 }))
+
+  const knownModels = new Set(data.models.map((option) => option.value))
+  const catalogModels = store
+    .getCatalogModels()
+    .filter((value) => !knownModels.has(value))
+    .map((value) => ({ value, requestCount: 0, totalTokens: 0 }))
 
   return {
     ...data,
+    providers: [...data.providers, ...catalogProviders],
+    models: [...data.models, ...catalogModels],
+    modelProviders: store.getModelProviderMap(),
     importErrors,
     pluginInstalled: isPluginInstalled(),
     paths: getDashboardPaths(),
@@ -316,6 +352,7 @@ app.whenReady().then(async () => {
   jsonlOffset = importState.jsonlOffset
   importErrors = importState.importErrors
   store = new MetricsStore(paths.sqlitePath)
+  syncModelCatalog()
   try {
     ingestServer = await startIngestServer({
       ingestPath: paths.ingestPath,
