@@ -1,19 +1,22 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       version:
-        description: "自定义版本号（留空则自动递增 patch）"
+        description: "版本号（必须大于当前最新版本，留空则自动递增 patch）"
         required: false
         type: string
+  pull_request:
+    types: [closed]
+    branches: [main]
 
 jobs:
   release:
     runs-on: macos-latest
-    if: "!contains(github.event.head_commit.message, '[skip release]')"
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release'))
     permissions:
       contents: write
     steps:
@@ -36,6 +39,14 @@ jobs:
           else
             IFS='.' read -r MAJOR MINOR PATCH <<< "$LATEST_NUM"
             NEXT="$MAJOR.$MINOR.$((PATCH + 1))"
+          fi
+
+          # 校验版本号必须大于当前
+          LATEST_ORD=$(echo "$LATEST_NUM" | awk -F. '{printf "%04d%04d%04d", $1, $2, $3}')
+          NEXT_ORD=$(echo "$NEXT" | awk -F. '{printf "%04d%04d%04d", $1, $2, $3}')
+          if [ "$NEXT_ORD" -le "$LATEST_ORD" ]; then
+            echo "❌ 版本 $NEXT 不大于当前最新版本 $LATEST_NUM"
+            exit 1
           fi
 
           echo "Next version: $NEXT"
