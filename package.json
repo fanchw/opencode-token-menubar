@@ -14,25 +14,27 @@
     "test:watch": "vitest",
     "start": "electron .",
     "dev:app": "bun run build:main && ELECTRON_RENDERER_URL=http://127.0.0.1:5173 electron .",
-    "dist": "bun run build && electron-builder --mac --universal"
+    "dist": "bun run build && electron-builder --mac",
+    "dist:arm64": "bun run build && electron-builder --mac --arm64",
+    "dist:x64": "bun run build && electron-builder --mac --x64"
   },
   "author": "fcw",
   "dependencies": {
-    "@vitejs/plugin-react": "^6.0.2",
     "chokidar": "^5.0.0",
-    "node-sqlite3-wasm": "^0.8.58",
-    "react": "^19.2.7",
-    "react-day-picker": "^10.0.1",
-    "react-dom": "^19.2.7",
-    "recharts": "^3.8.1"
+    "node-sqlite3-wasm": "^0.8.58"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
     "electron": "^42.4.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
+    "react": "^19.2.7",
+    "react-day-picker": "^10.0.1",
+    "react-dom": "^19.2.7",
+    "recharts": "^3.8.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
@@ -52,8 +54,8 @@
       "category": "public.app-category.developer-tools",
       "icon": "assets/icon.icns",
       "target": [
-        { "target": "dmg", "arch": ["universal"] },
-        { "target": "zip", "arch": ["universal"] }
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
       ]
     },
     "dmg": {
