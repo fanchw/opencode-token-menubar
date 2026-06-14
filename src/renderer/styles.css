@@ -82,6 +82,7 @@ select {
   color: #6b6b8d;
   font-size: 16px;
   cursor: pointer;
+  outline: none;
   transition: box-shadow 120ms ease, color 120ms ease;
 }
 

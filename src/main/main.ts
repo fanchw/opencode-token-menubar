@@ -231,15 +231,8 @@ function buildTrayMenu(): Menu {
 }
 
 function createTrayIcon() {
-  const icon = nativeImage.createFromDataURL(
-    `data:image/svg+xml;utf8,${encodeURIComponent(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
-        <circle cx="11" cy="11" r="8.5" fill="none" stroke="black" stroke-width="1.8"/>
-        <path fill="black" d="M11 5.5a5.5 5.5 0 0 1 4.9 8h-2.2A3.5 3.5 0 0 0 11 7.5z"/>
-        <circle cx="11" cy="11" r="1.8" fill="black"/>
-      </svg>
-    `)}`,
-  )
+  const iconPath = path.join(app.getAppPath(), "assets/trayIcon.png")
+  const icon = nativeImage.createFromPath(iconPath)
   icon.setTemplateImage(true)
 
   return icon
