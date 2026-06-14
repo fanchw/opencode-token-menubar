@@ -88,6 +88,48 @@ bun run build
 
 - **国际化**：支持英文和简体中文。采用轻量内置方案（`t(key)` 字典函数，0 依赖），key 结构和字典 JSON 与 i18next 保持一致，便于后续无缝迁移到 `react-i18next`。
 
+## Release / 发布流程
+
+仓库：https://github.com/fanchw/opencode-token-menubar
+
+### 分支策略
+
+- **禁止直接修改 main 分支**
+- 功能分支开发（`feat/xxx`、`fix/xxx`）→ PR → 合并 main
+- CI 配置：`.github/workflows/release.yml` + `.github/release.yml`（release notes 分类）
+
+### 发版触发方式
+
+| 方式 | 操作 | 版本号 |
+|------|------|--------|
+| **PR 发版** | 创建 PR → 加 `release` label → 合并 | 自动递增 patch（v0.1.0 → v0.1.1） |
+| **手动发版** | GitHub Actions 页面 → Release → Run workflow → 填版本号（可选） | 自定义或自动递增，必须 > 当前 |
+| **不发版** | 普通 PR（无 `release` label） | 不触发 |
+
+### CI 自动执行步骤
+
+1. 从 git tag 获取最新版本号，计算下一个版本（patch +1 或自定义）
+2. 校验新版本 > 当前版本
+3. 更新 `package.json` version → commit → tag `v0.x.x` → push
+4. `bun install` → `bun run build` → `bun run dist`（构建 arm64 + x64 dmg/zip）
+5. 发布到 GitHub Releases（自动生成 release notes，按 label 分类）
+
+### Release Notes 来源
+
+- `generate_release_notes: true` + `.github/release.yml` 配置
+- 按 PR label 自动分类：`feature`（新功能）、`bug`（修复）、`performance`（优化）、其他
+- PR 标题建议用 conventional commits 格式
+
+### 打包注意事项
+
+- `electron` 必须在 `devDependencies`（electron-builder 要求）
+- 前端依赖（react/recharts 等）放 `devDependencies`，Vite 已打包，避免打进 app.asar
+- `vite.config.ts` 必须设 `base: "./"`（`loadFile` 需要 `file://` 相对路径）和 `emptyOutDir: true`（清理旧产物）
+- 按架构分开打包（arm64 + x64），单个 dmg 约 115MB（universal 约 205MB）
+- 无代码签名（无 Apple Developer ID），用户首次打开需右键"打开"绕过 Gatekeeper
+- 应用图标 `assets/icon.icns`，tray 图标用 base64 内嵌 `src/main/main.ts`
+- Actions 版本：`actions/checkout@v5`、`softprops/action-gh-release@v3`（Node.js 24 兼容）
+
 ## Memory Management
 
 Project memory lives in `.claude/memory/`.
