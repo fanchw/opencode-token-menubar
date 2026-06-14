@@ -285,4 +285,42 @@ describe("MetricsStore", () => {
     );
     expect(summary).toEqual({ latestSpeed: null, totalTokens: 0 });
   });
+
+  test("caches catalog queries until invalidated by write", () => {
+    tempDir = mkdtempSync(join(tmpdir(), "metrics-store-"));
+    const dbPath = join(tempDir, "metrics.sqlite");
+
+    // 用计数包装代理统计 SELECT 查询次数
+    const counts = { all: 0 };
+    class CountingDatabase extends MetricsStore.DatabaseConstructor {
+      override all(sql: string, values?: unknown[]): unknown[] {
+        counts.all += 1;
+        return super.all(sql, values as never);
+      }
+    }
+
+    const countingStore = new MetricsStore(dbPath, CountingDatabase);
+    countingStore.insertEvents([baseEvents[0]]);
+    counts.all = 0;
+
+    // 首次：3 个 catalog getter 各查一次
+    countingStore.getCatalogProviders();
+    countingStore.getCatalogModels();
+    countingStore.getModelProviderMap();
+    expect(counts.all).toBe(3);
+
+    // 第二次：全命中缓存，零查询
+    countingStore.getCatalogProviders();
+    countingStore.getCatalogModels();
+    countingStore.getModelProviderMap();
+    expect(counts.all).toBe(3);
+
+    // 写入后失效：再次查询重跑
+    countingStore.insertEvents([baseEvents[1]]);
+    counts.all = 0;
+    countingStore.getCatalogProviders();
+    expect(counts.all).toBe(1);
+
+    countingStore.close();
+  });
 });

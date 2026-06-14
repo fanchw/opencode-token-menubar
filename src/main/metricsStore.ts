@@ -57,6 +57,11 @@ export class MetricsStore {
   static readonly DatabaseConstructor: DatabaseConstructor = sqlite.Database;
 
   private readonly database: DatabaseConnection;
+  private catalogCache: {
+    providers: string[] | null;
+    models: string[] | null;
+    modelProviderMap: Record<string, string[]> | null;
+  } = { providers: null, models: null, modelProviderMap: null };
 
   constructor(databasePath: string, DatabaseCtor: DatabaseConstructor = MetricsStore.DatabaseConstructor) {
     mkdirSync(dirname(databasePath), { recursive: true });
@@ -134,17 +139,23 @@ export class MetricsStore {
   }
 
   getCatalogProviders(): string[] {
+    if (this.catalogCache.providers !== null) return this.catalogCache.providers;
     const rows = this.database.all(
       "SELECT value FROM providers ORDER BY value",
     ) as { value: string }[];
-    return rows.map((row) => row.value);
+    const providers = rows.map((row) => row.value);
+    this.catalogCache.providers = providers;
+    return providers;
   }
 
   getCatalogModels(): string[] {
+    if (this.catalogCache.models !== null) return this.catalogCache.models;
     const rows = this.database.all(
       "SELECT DISTINCT value FROM models ORDER BY value",
     ) as { value: string }[];
-    return rows.map((row) => row.value);
+    const models = rows.map((row) => row.value);
+    this.catalogCache.models = models;
+    return models;
   }
 
   getModelProviders(model: string): string[] {
@@ -156,6 +167,7 @@ export class MetricsStore {
   }
 
   getModelProviderMap(): Record<string, string[]> {
+    if (this.catalogCache.modelProviderMap !== null) return this.catalogCache.modelProviderMap;
     const rows = this.database.all(
       "SELECT value, provider FROM models ORDER BY value, provider",
     ) as { value: string; provider: string }[];
@@ -164,6 +176,7 @@ export class MetricsStore {
       if (!map[row.value]) map[row.value] = [];
       map[row.value].push(row.provider);
     }
+    this.catalogCache.modelProviderMap = map;
     return map;
   }
 
@@ -326,6 +339,7 @@ export class MetricsStore {
 
   close(): void {
     this.database.close();
+    this.catalogCache = { providers: null, models: null, modelProviderMap: null };
   }
 
   getTraySummary(start: string, end: string): TraySummary {
@@ -355,6 +369,7 @@ export class MetricsStore {
   }
 
   private upsertCatalog(provider: string, model: string): void {
+    this.catalogCache = { providers: null, models: null, modelProviderMap: null };
     const now = new Date().toISOString();
     this.database.run(
       "INSERT OR IGNORE INTO providers (value, first_seen) VALUES (?, ?)",
