@@ -201,16 +201,13 @@ async function installGlobalPlugin() {
     sharedTargetPath: paths.pluginSharedPath,
     configPath: paths.configPath,
   })
-  updateTrayMenu()
   broadcastDashboardUpdated()
 
   return result
 }
 
-function updateTrayMenu() {
-  if (!tray) return
-
-  tray.setContextMenu(Menu.buildFromTemplate([
+function buildTrayMenu(): Menu {
+  return Menu.buildFromTemplate([
     {
       label: "Refresh",
       click: () => {
@@ -230,7 +227,7 @@ function updateTrayMenu() {
       label: "Quit",
       click: () => app.quit(),
     },
-  ]))
+  ])
 }
 
 function createTrayIcon() {
@@ -300,6 +297,14 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  })
+
+  window.on("blur", () => {
+    setTimeout(() => {
+      if (window?.isVisible() && !window.isFocused()) {
+        window.hide()
+      }
+    }, 150)
   })
 
   if (rendererUrl) {
@@ -384,7 +389,7 @@ app.whenReady().then(async () => {
   tray = new Tray(createTrayIcon())
   tray.setToolTip("OpenCode Token Menubar")
   tray.on("click", toggleWindow)
-  updateTrayMenu()
+  tray.on("right-click", () => tray?.popUpContextMenu(buildTrayMenu()))
   updateTrayTitle()
 })
 
