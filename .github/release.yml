@@ -1,0 +1,16 @@
+changelog:
+  categories:
+    - title: "✨ 新功能"
+      labels:
+        - "feature"
+        - "enhancement"
+    - title: "🐛 Bug 修复"
+      labels:
+        - "bug"
+        - "fix"
+    - title: "⚡ 性能优化"
+      labels:
+        - "performance"
+    - title: "🔧 其他变更"
+      labels:
+        - "*"
