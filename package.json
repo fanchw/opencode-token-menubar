@@ -1,6 +1,6 @@
 {
   "name": "opencode-token-menubar",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "macOS menubar dashboard for OpenCode token metrics",
   "main": "dist/main/main.js",
