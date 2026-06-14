@@ -181,11 +181,11 @@ function updateTrayTitle() {
   const { dayStart, dayEnd } = getTodayRange()
   const summary = store.getTraySummary(dayStart, dayEnd)
   if (summary.latestSpeed != null && summary.latestSpeed > 0) {
-    tray.setTitle(`OC ${Math.round(summary.latestSpeed)}/s`)
+    tray.setToolTip(`OpenCode · ${Math.round(summary.latestSpeed)} tok/s · ${formatTokenUnit(summary.totalTokens)} today`)
   } else if (summary.totalTokens > 0) {
-    tray.setTitle(`OC ${formatTokenUnit(summary.totalTokens)}`)
+    tray.setToolTip(`OpenCode · ${formatTokenUnit(summary.totalTokens)} today`)
   } else {
-    tray.setTitle("OC")
+    tray.setToolTip("OpenCode Token Menubar")
   }
 }
 
@@ -236,8 +236,10 @@ function updateTrayMenu() {
 function createTrayIcon() {
   const icon = nativeImage.createFromDataURL(
     `data:image/svg+xml;utf8,${encodeURIComponent(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
-        <path fill="black" d="M4 3h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v8h10V5H4Zm2 2h6v1.5H6V7Zm0 3h4v1.5H6V10Z"/>
+      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
+        <circle cx="11" cy="11" r="8.5" fill="none" stroke="black" stroke-width="1.8"/>
+        <path fill="black" d="M11 5.5a5.5 5.5 0 0 1 4.9 8h-2.2A3.5 3.5 0 0 0 11 7.5z"/>
+        <circle cx="11" cy="11" r="1.8" fill="black"/>
       </svg>
     `)}`,
   )
@@ -380,7 +382,6 @@ app.whenReady().then(async () => {
 
   createWindow()
   tray = new Tray(createTrayIcon())
-  tray.setTitle("OC")
   tray.setToolTip("OpenCode Token Menubar")
   tray.on("click", toggleWindow)
   updateTrayMenu()
