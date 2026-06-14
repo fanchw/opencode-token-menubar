@@ -1,12 +1,13 @@
 # 性能优化点
 
 > 审查日期: 2026-06-14
+> 最后更新: 2026-06-14（高优先级 1/2/4 已完成）
 
 按影响程度排序。
 
 ## 高优先级
 
-### 1. `updateTrayTitle` 每次调用跑完整 dashboard 查询
+### 1. ✅ `updateTrayTitle` 每次调用跑完整 dashboard 查询（已完成）
 
 `src/main/main.ts:176` → `getDashboardData()` 内含 7 次串行 SQL 查询，但 tray 只用到 `recent[0].tokensPerSecond` 和 `today.totalTokens`。
 
@@ -14,7 +15,9 @@
 
 **方案**：给 tray 单独写轻量查询（只取 recent[0] + today summary），或复用缓存。
 
-### 2. 每条 metric 事件触发全链路刷新，无批量合并
+**完成**：新增 `MetricsStore.getTraySummary()`（2 条 SQL），`updateTrayTitle()` 改用之。commit `ecc355b`。
+
+### 2. ✅ 每条 metric 事件触发全链路刷新，无批量合并（已完成）
 
 `src/main/main.ts:269-277` `insertLocalMetric`：
 - 逐条单独事务写入 SQLite
@@ -25,17 +28,19 @@
 
 **方案**：ingest 端加 buffer/debounce（如 200ms 窗口），合并写入和刷新。
 
+**完成**：新增 `EventBuffer`（200ms 合并），`insertLocalMetric` 改为 buffer 入口。commit `be201bb` + `223fed5`。
+
 ### 3. `getDashboardData` 同步阻塞主进程
 
 `src/main/metricsStore.ts:175`：7 次串行 SQL 查询全在主线程同步执行，数据量增大后卡 UI。
 
 **方案**：考虑 `worker_threads` 或拆分为增量查询。
 
-### 4. SQLite 未开 WAL
+> 注：本项仅降低频率（批量合并后触发频率大幅下降），未根治同步阻塞。属下一阶段独立工作。
 
-`src/main/metricsStore.ts:58`：默认 rollback journal，高频读写并发差。
+### 4. ~~SQLite 未开 WAL~~（已放弃）
 
-**方案**：`PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;`
+实测 `node-sqlite3-wasm` 的 wasm 构建不支持 WAL（`PRAGMA journal_mode=WAL` 被静默降级为 `memory`）。本项目 SQLite 单连接使用，WAL 收益有限，故放弃。若未来切换 native 驱动可重新评估。
 
 ## 中优先级
 

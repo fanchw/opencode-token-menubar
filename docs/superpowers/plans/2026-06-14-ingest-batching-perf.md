@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **状态：✅ 已完成（2026-06-14）。** Task 2/3/4 实现并提交（`ecc355b` getTraySummary、`be201bb` EventBuffer、`223fed5` main 集成）。Task 1 WAL 因 `node-sqlite3-wasm` 不支持 WAL 已移除。全量 72 测试通过，build 通过。
+
 **Goal:** 消除高频 ingest 事件导致的写入风暴和查询风暴，通过 200ms 批量合并 + tray 轻量查询将每条事件的 7 次 SQL 查询降为每 200ms 2 次。
 
 **Architecture:** 新增 `EventBuffer` 类负责收集/合并事件并在 timer 到期时回调 flush。`MetricsStore` 新增 `getTraySummary()` 轻量查询方法。`main.ts` 将 `insertLocalMetric` 改为 buffer 入口，flush 回调中批量写入 + 更新 tray + 广播。
@@ -36,7 +38,7 @@
 - Modify: `src/main/metricsStore.ts`
 - Modify: `src/main/metricsStore.test.ts`
 
-- [ ] **Step 1: Write failing getTraySummary tests**
+- [x] **Step 1: Write failing getTraySummary tests**
 
 在 `src/main/metricsStore.test.ts` 的 `describe("MetricsStore", ...)` 块末尾添加三个测试：
 
@@ -71,13 +73,13 @@
   });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bun run test src/main/metricsStore.test.ts -t "getTraySummary"`
 
 Expected: FAIL — `getTraySummary` is not defined / does not exist on MetricsStore.
 
-- [ ] **Step 3: Add TraySummary interface and getTraySummary method**
+- [x] **Step 3: Add TraySummary interface and getTraySummary method**
 
 在 `src/main/metricsStore.ts` 中，`DashboardQuery` 接口之后添加：
 
@@ -118,19 +120,19 @@ export interface TraySummary {
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `bun run test src/main/metricsStore.test.ts -t "getTraySummary"`
 
 Expected: All 3 tests PASS
 
-- [ ] **Step 5: Run all metricsStore tests to verify no regression**
+- [x] **Step 5: Run all metricsStore tests to verify no regression**
 
 Run: `bun run test src/main/metricsStore.test.ts`
 
 Expected: All tests PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/main/metricsStore.ts src/main/metricsStore.test.ts
@@ -145,7 +147,7 @@ git commit -m "feat: 新增 getTraySummary 轻量查询方法"
 - Create: `src/main/eventBuffer.ts`
 - Create: `src/main/eventBuffer.test.ts`
 
-- [ ] **Step 1: Write failing EventBuffer tests**
+- [x] **Step 1: Write failing EventBuffer tests**
 
 创建 `src/main/eventBuffer.test.ts`：
 
@@ -254,13 +256,13 @@ describe("EventBuffer", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `bun run test src/main/eventBuffer.test.ts`
 
 Expected: FAIL — `Cannot find module "./eventBuffer.js"` 或类似导入错误。
 
-- [ ] **Step 3: Create EventBuffer implementation**
+- [x] **Step 3: Create EventBuffer implementation**
 
 创建 `src/main/eventBuffer.ts`：
 
@@ -302,13 +304,13 @@ export class EventBuffer {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `bun run test src/main/eventBuffer.test.ts`
 
 Expected: All 6 tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main/eventBuffer.ts src/main/eventBuffer.test.ts
@@ -322,7 +324,7 @@ git commit -m "feat: 新增 EventBuffer 批量合并模块"
 **Files:**
 - Modify: `src/main/main.ts`
 
-- [ ] **Step 1: Add EventBuffer import**
+- [x] **Step 1: Add EventBuffer import**
 
 在 `src/main/main.ts` 顶部导入区（`import { installPlugin } from "./pluginInstaller.js"` 之后）添加：
 
@@ -330,7 +332,7 @@ git commit -m "feat: 新增 EventBuffer 批量合并模块"
 import { EventBuffer } from "./eventBuffer.js"
 ```
 
-- [ ] **Step 2: Add eventBuffer module-level variable**
+- [x] **Step 2: Add eventBuffer module-level variable**
 
 在模块级变量区（`let ingestServer: IngestServerHandle | null = null` 之后）添加：
 
@@ -338,7 +340,7 @@ import { EventBuffer } from "./eventBuffer.js"
 let eventBuffer: EventBuffer | null = null
 ```
 
-- [ ] **Step 3: Rewrite updateTrayTitle to use getTraySummary**
+- [x] **Step 3: Rewrite updateTrayTitle to use getTraySummary**
 
 将 `src/main/main.ts` 中的 `updateTrayTitle` 函数整体替换为：
 
@@ -358,7 +360,7 @@ function updateTrayTitle() {
 }
 ```
 
-- [ ] **Step 4: Rewrite insertLocalMetric to use buffer**
+- [x] **Step 4: Rewrite insertLocalMetric to use buffer**
 
 将 `src/main/main.ts` 中的 `insertLocalMetric` 函数整体替换为：
 
@@ -368,7 +370,7 @@ function insertLocalMetric(event: MetricEvent) {
 }
 ```
 
-- [ ] **Step 5: Create EventBuffer instance in app.whenReady**
+- [x] **Step 5: Create EventBuffer instance in app.whenReady**
 
 在 `app.whenReady().then(async () => {` 中，找到 `store = new MetricsStore(paths.sqlitePath)` 行之后，`syncModelCatalog()` 之前，插入：
 
@@ -384,7 +386,7 @@ function insertLocalMetric(event: MetricEvent) {
   })
 ```
 
-- [ ] **Step 6: Add flush before store close in before-quit**
+- [x] **Step 6: Add flush before store close in before-quit**
 
 在 `app.on("before-quit", ...)` 的 async cleanup 块中，找到 `try { await ingestServer?.stop() }` 的 `finally` 块之后、`try { store?.close() }` 之前，插入：
 
@@ -393,19 +395,19 @@ function insertLocalMetric(event: MetricEvent) {
       eventBuffer = null
 ```
 
-- [ ] **Step 7: Run build to verify compilation**
+- [x] **Step 7: Run build to verify compilation**
 
 Run: `bun run build`
 
 Expected: Build succeeds with no TypeScript errors. Vite chunk size warning is OK.
 
-- [ ] **Step 8: Run all tests to verify no regression**
+- [x] **Step 8: Run all tests to verify no regression**
 
 Run: `bun run test`
 
 Expected: All tests PASS
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/main/main.ts
@@ -418,8 +420,8 @@ git commit -m "feat: ingest 事件批量合并 + tray 轻量查询接入"
 
 完成后确认：
 
-- [ ] `bun run test` 全部通过
-- [ ] `bun run build` 无编译错误
-- [ ] `updateTrayTitle` 不再调用 `getDashboardData()`
-- [ ] `insertLocalMetric` 不再直接调用 `store.insertEvents`
-- [ ] `before-quit` 在关闭 store 前 flush buffer
+- [x] `bun run test` 全部通过
+- [x] `bun run build` 无编译错误
+- [x] `updateTrayTitle` 不再调用 `getDashboardData()`
+- [x] `insertLocalMetric` 不再直接调用 `store.insertEvents`
+- [x] `before-quit` 在关闭 store 前 flush buffer
