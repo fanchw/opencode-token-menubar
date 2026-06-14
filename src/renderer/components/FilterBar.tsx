@@ -7,6 +7,7 @@ import { t } from "../i18n.js"
 import type { QuickRange, TimezoneMode } from "../timeFilters.js"
 import { quickRanges, toDateTimeLocalValue } from "../utils.js"
 import { SelectOverlay } from "./SelectOverlay.js"
+import { DropdownSelect } from "./shared.js"
 
 export interface FilterBarProps {
   activeFilterTab: "range" | "providers" | "models" | null
@@ -148,10 +149,15 @@ export function FilterBar({
               </label>
               <label className="filter-group timezone-select">
                 <span>{t("range.timezone")}</span>
-                <select value={timezone} onChange={(event) => setTimezone(event.target.value as TimezoneMode)}>
-                  <option value="local">{t("range.timezone.local")}</option>
-                  <option value="utc">{t("range.timezone.utc")}</option>
-                </select>
+                <DropdownSelect<TimezoneMode>
+                  dropUp
+                  value={timezone}
+                  onChange={setTimezone}
+                  options={[
+                    { value: "local", label: t("range.timezone.local") },
+                    { value: "utc", label: t("range.timezone.utc") },
+                  ]}
+                />
               </label>
             </div>
             {customRangeError ? <p className="filter-error">{customRangeError}</p> : null}
