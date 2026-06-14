@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "vitest";
+import type { BindValues } from "node-sqlite3-wasm";
 
 import { MetricsStore } from "./metricsStore.js";
 import type { MetricEvent } from "../shared/metrics.js";
@@ -293,9 +294,9 @@ describe("MetricsStore", () => {
     // 用计数包装代理统计 SELECT 查询次数
     const counts = { all: 0 };
     class CountingDatabase extends MetricsStore.DatabaseConstructor {
-      override all(sql: string, values?: unknown[]): unknown[] {
+      override all(sql: string, values?: BindValues): unknown[] {
         counts.all += 1;
-        return super.all(sql, values as never);
+        return super.all(sql, values);
       }
     }
 

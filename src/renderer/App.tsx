@@ -306,18 +306,20 @@ export default function App() {
     }
     return ticks
   }, [filters.start, filters.end, intervalSec])
-  const filledTrends = fillEmptyBuckets(
-    dashboard?.hourlyTrends ?? [],
-    intervalSec,
-    new Date(filters.start).getTime(),
-    new Date(filters.end).getTime(),
-  )
-  const chartData = filledTrends.map((row) => ({
-    ...row,
-    ts: new Date(row.hour).getTime(),
-    label: formatTimeInZone(row.hour, timezone, axisLabelOpts),
-    fresh: Math.max(0, row.inputTokens - row.cacheTokens),
-  }))
+  const chartData = useMemo(() => {
+    const filled = fillEmptyBuckets(
+      dashboard?.hourlyTrends ?? [],
+      intervalSec,
+      new Date(filters.start).getTime(),
+      new Date(filters.end).getTime(),
+    )
+    return filled.map((row) => ({
+      ...row,
+      ts: new Date(row.hour).getTime(),
+      label: formatTimeInZone(row.hour, timezone, axisLabelOpts),
+      fresh: Math.max(0, row.inputTokens - row.cacheTokens),
+    }))
+  }, [dashboard?.hourlyTrends, intervalSec, filters.start, filters.end, timezone, axisLabelOpts])
   const visibleChartData = chartData.length > 0 ? chartData : emptyChartData
   const spanMinutes = Math.max(1, (new Date(filters.end).getTime() - new Date(filters.start).getTime()) / 60000)
   const tpm = (today?.totalTokens ?? 0) / spanMinutes
