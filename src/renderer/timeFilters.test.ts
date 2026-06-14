@@ -107,6 +107,6 @@ describe("timeFilters", () => {
   test("formats UTC time label", () => {
     const label = formatTimeInZone("2026-06-12T08:30:00.000Z", "utc");
 
-    expect(label).toBe("08:30");
+    expect(label).toBe("2026-06-12 08:30:00");
   });
 });

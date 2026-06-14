@@ -21,6 +21,7 @@
     "electron": "latest",
     "node-sqlite3-wasm": "^0.8.58",
     "react": "latest",
+    "react-day-picker": "^10.0.1",
     "react-dom": "latest",
     "recharts": "latest"
   },

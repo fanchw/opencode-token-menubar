@@ -76,8 +76,11 @@ export function validateCustomRange(startValue: string, endValue: string): Custo
 export function formatTimeInZone(
   timestamp: string,
   timezone: TimezoneMode,
-  options: Intl.DateTimeFormatOptions = {},
+  options?: Intl.DateTimeFormatOptions,
 ): string {
+  if (!options || Object.keys(options).length === 0) {
+    return formatFullTimestamp(timestamp, timezone);
+  }
   return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -85,6 +88,15 @@ export function formatTimeInZone(
     timeZone: timezone === "utc" ? "UTC" : undefined,
     ...options,
   }).format(new Date(timestamp));
+}
+
+function formatFullTimestamp(timestamp: string, timezone: TimezoneMode): string {
+  const date = new Date(timestamp);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (timezone === "utc") {
+    return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+  }
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function getCalendarStart(
