@@ -9,7 +9,6 @@
 1. `updateTrayTitle()` 调用 `getDashboardData()` 跑完整 7 次 SQL 查询，但 tray 只用到 `recent[0].speed` 和 `today.totalTokens`。每个 ingest 事件都调用一次。
 2. `insertLocalMetric` 逐条单独事务写入 SQLite，无批量合并。流式响应短时间内几十条事件 = 几十次小事务。
 3. `getDashboardData` 7 次串行 SQL 查询同步阻塞主进程，数据量增大后卡 UI。
-4. SQLite 默认 rollback journal，高频读写并发差。
 
 ## Design
 
@@ -43,16 +42,9 @@ FROM requests WHERE timestamp >= ? AND timestamp < ?
 
 不做代码改动。该查询仍由 renderer 通过 IPC 调用，但调用频率因批量合并而大幅降低：从「每条事件触发一次」变为「每 200ms 至多一次」，再经 renderer debounce 120ms 进一步合并。
 
-### 4. SQLite WAL 模式
+### 4. SQLite WAL 模式（已移除）
 
-`src/main/metricsStore.ts` 构造函数或 `initializeSchema()` 中添加：
-
-```sql
-PRAGMA journal_mode=WAL;
-PRAGMA synchronous=NORMAL;
-```
-
-WAL 允许读写并发，`synchronous=NORMAL` 在 WAL 下安全且减少 fsync 开销。
+原计划开 WAL 提升并发，但实测 `node-sqlite3-wasm` 的 wasm 构建不支持 WAL（`PRAGMA journal_mode=WAL` 被静默降级为 `memory`，其余 rollback 模式正常）。本项目 SQLite 为单连接使用，WAL 收益有限，故放弃。若未来切换到 native 驱动（如 `better-sqlite3`）可重新引入。
 
 ## Data Flow After Optimization
 
@@ -77,14 +69,12 @@ ingest 事件3 ─┘                                          │
 - **App 退出时有 pending 事件**：`before-quit` 中同步调用 `flushPendingEvents()`，写完后才关闭 store。
 - **buffer flush 时又来新事件**：新事件 push 到已清空的 buffer，并设新 timer。flush 是同步的，不会与 ingest 回调交错。
 - **窗口不可见时**：仍然 buffer + flush + 写入 SQLite。数据必须持久化，只是 renderer 不刷新（renderer debounce 自然跳过）。
-- **WAL 切换失败**：`PRAGMA journal_mode=WAL` 返回非 `wal` 时记日志但不阻断启动，退回默认 journal 模式。
 
 ## Testing
 
 - `getTraySummary()`：空表返回 `{ latestSpeed: null, totalTokens: 0 }`；有数据时返回正确的最新 speed 和总量；仅有范围外旧数据时返回 null/0。
 - Buffer flush：多事件合并为单次事务；timer 去重（连续 push 只设一个 timer）；flush 后 buffer 和 timer 清空。
 - 退出时 flush：pending 事件在 store.close() 前被写入。
-- WAL 模式：构造函数后验证 `PRAGMA journal_mode` 返回 `wal`。
 - 运行变更模块的聚焦测试，然后 `bun run build` 验证。
 
 ## Non-Goals

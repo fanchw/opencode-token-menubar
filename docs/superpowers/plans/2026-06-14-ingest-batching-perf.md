@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 消除高频 ingest 事件导致的写入风暴和查询风暴，通过 200ms 批量合并 + tray 轻量查询 + WAL 模式将每条事件的 7 次 SQL 查询降为每 200ms 2 次。
+**Goal:** 消除高频 ingest 事件导致的写入风暴和查询风暴，通过 200ms 批量合并 + tray 轻量查询将每条事件的 7 次 SQL 查询降为每 200ms 2 次。
 
-**Architecture:** 新增 `EventBuffer` 类负责收集/合并事件并在 timer 到期时回调 flush。`MetricsStore` 新增 `getTraySummary()` 轻量查询方法和 WAL pragma。`main.ts` 将 `insertLocalMetric` 改为 buffer 入口，flush 回调中批量写入 + 更新 tray + 广播。
+**Architecture:** 新增 `EventBuffer` 类负责收集/合并事件并在 timer 到期时回调 flush。`MetricsStore` 新增 `getTraySummary()` 轻量查询方法。`main.ts` 将 `insertLocalMetric` 改为 buffer 入口，flush 回调中批量写入 + 更新 tray + 广播。
+
+> **WAL 已剔除：** 实测 `node-sqlite3-wasm` 的 wasm 构建不支持 WAL（`PRAGMA journal_mode=WAL` 被静默降级为 `memory`）。本项目 SQLite 为单连接使用，WAL 收益有限，故从计划中移除。
 
 **Tech Stack:** Electron, TypeScript, Vitest, node-sqlite3-wasm.
 
@@ -14,78 +16,17 @@
 
 ## File Structure
 
-- Modify `src/main/metricsStore.ts` — 新增 `TraySummary` 接口、`getTraySummary()` 方法、WAL pragma。
-- Modify `src/main/metricsStore.test.ts` — 新增 `getTraySummary` 和 WAL 模式测试。
+- Modify `src/main/metricsStore.ts` — 新增 `TraySummary` 接口、`getTraySummary()` 方法。
+- Modify `src/main/metricsStore.test.ts` — 新增 `getTraySummary` 测试。
 - Create `src/main/eventBuffer.ts` — 纯逻辑的 EventBuffer 类，可独立测试。
 - Create `src/main/eventBuffer.test.ts` — EventBuffer 的全部行为测试。
 - Modify `src/main/main.ts` — 创建 EventBuffer 实例、改写 `insertLocalMetric` 和 `updateTrayTitle`、退出时 flush。
 
 ---
 
-## Task 1: SQLite WAL Mode
+## ~~Task 1: SQLite WAL Mode~~ (已移除)
 
-**Files:**
-- Modify: `src/main/metricsStore.ts` (constructor → `initializeSchema`)
-- Modify: `src/main/metricsStore.test.ts`
-
-- [ ] **Step 1: Write failing WAL test**
-
-在 `src/main/metricsStore.test.ts` 顶部导入中添加 `existsSync`：
-
-```ts
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-```
-
-在 `describe("MetricsStore", () => {` 块末尾（最后一个 test 之后）添加：
-
-```ts
-  test("enables WAL journal mode", () => {
-    tempDir = mkdtempSync(join(tmpdir(), "metrics-store-"));
-    const dbPath = join(tempDir, "metrics.sqlite");
-    store = new MetricsStore(dbPath);
-    store.insertEvents([baseEvents[0]]);
-
-    expect(existsSync(`${dbPath}-wal`)).toBe(true);
-  });
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `bun run test src/main/metricsStore.test.ts -t "enables WAL"`
-
-Expected: FAIL — `existsSync(...-wal)` returns `false`，因为默认 journal mode 不是 WAL。
-
-- [ ] **Step 3: Add WAL pragma to initializeSchema**
-
-在 `src/main/metricsStore.ts` 的 `initializeSchema()` 方法开头（`this.database.exec(\`CREATE TABLE...` 之前）添加：
-
-```ts
-  private initializeSchema(): void {
-    this.database.exec("PRAGMA journal_mode=WAL");
-    this.database.exec("PRAGMA synchronous=NORMAL");
-
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS requests (
-```
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `bun run test src/main/metricsStore.test.ts -t "enables WAL"`
-
-Expected: PASS
-
-- [ ] **Step 5: Run all metricsStore tests to verify no regression**
-
-Run: `bun run test src/main/metricsStore.test.ts`
-
-Expected: All tests PASS
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add src/main/metricsStore.ts src/main/metricsStore.test.ts
-git commit -m "feat: 开启 SQLite WAL 模式提升读写并发"
-```
+`node-sqlite3-wasm` 不支持 WAL。详见 Plan 头部说明。原 Task 2-4 顺次前移。
 
 ---
 
@@ -482,4 +423,3 @@ git commit -m "feat: ingest 事件批量合并 + tray 轻量查询接入"
 - [ ] `updateTrayTitle` 不再调用 `getDashboardData()`
 - [ ] `insertLocalMetric` 不再直接调用 `store.insertEvents`
 - [ ] `before-quit` 在关闭 store 前 flush buffer
-- [ ] SQLite 以 WAL 模式运行
