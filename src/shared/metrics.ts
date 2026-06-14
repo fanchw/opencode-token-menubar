@@ -99,10 +99,43 @@ export interface DashboardData {
   };
 }
 
+export interface SummaryResponse {
+  today: TodaySummary;
+  providers: FilterOption[];
+  models: FilterOption[];
+  modelProviders?: Record<string, string[]>;
+  importErrors?: number;
+  pluginInstalled?: boolean;
+  paths?: {
+    jsonlPath: string;
+    ingestPath: string;
+    sqlitePath: string;
+    pluginPath: string;
+  };
+}
+
+export interface RecentResponse {
+  rows: MetricEvent[];
+  total: number;
+}
+
+export interface TrendsResponse {
+  trends: HourlyTrendRow[];
+  trendIntervalSeconds: number;
+}
+
+export interface DashboardUpdatePayload {
+  reason: "new-data" | "catalog-sync";
+}
+
 export interface TokenMetricsApi {
   getDashboardData(filters: DashboardFilters): Promise<DashboardData>;
+  getSummary(filters: DashboardFilters): Promise<SummaryResponse>;
+  getRecent(filters: DashboardFilters): Promise<RecentResponse>;
+  getRanking(filters: DashboardFilters): Promise<ModelRankingRow[]>;
+  getTrends(filters: DashboardFilters): Promise<TrendsResponse>;
   installPlugin(): Promise<{ installed: true; targetPath: string }>;
-  onDashboardUpdated(callback: () => void): () => void;
+  onDashboardUpdated(callback: (payload: DashboardUpdatePayload) => void): () => void;
 }
 
 declare global {

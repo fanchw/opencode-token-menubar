@@ -10,7 +10,7 @@ import { resolveAppPaths, type AppPaths } from "./paths.js"
 import { installPlugin } from "./pluginInstaller.js"
 import { EventBuffer } from "./eventBuffer.js"
 import { formatTokenUnit } from "../shared/metrics.js"
-import type { DashboardData, DashboardFilters, MetricEvent } from "../shared/metrics.js"
+import type { DashboardData, DashboardFilters, MetricEvent, SummaryResponse, DashboardUpdatePayload } from "../shared/metrics.js"
 import { readOpenCodeModels } from "./opencodeModels.js"
 
 interface AppState {
@@ -108,10 +108,10 @@ function getDefaultDashboardFilters(): DashboardFilters {
   return { start: dayStart, end: dayEnd }
 }
 
-function broadcastDashboardUpdated() {
+function broadcastDashboardUpdated(payload: DashboardUpdatePayload = { reason: "new-data" }) {
   if (!state.window || state.window.isDestroyed() || state.window.webContents.isDestroyed()) return
 
-  state.window.webContents.send("metrics:dashboard-updated")
+  state.window.webContents.send("metrics:dashboard-updated", payload)
 }
 
 function normalizeDashboardFilters(filters: unknown): DashboardFilters {
@@ -187,6 +187,37 @@ function getDashboardData(filters = getDefaultDashboardFilters()): DashboardData
     ...data,
     providers: [...data.providers, ...catalogProviders],
     models: [...data.models, ...catalogModels],
+    modelProviders: state.store.getModelProviderMap(),
+    importErrors: state.importErrors,
+    pluginInstalled: isPluginInstalled(),
+    paths: getDashboardPaths(),
+  }
+}
+
+function getSummaryData(filters = getDefaultDashboardFilters()): SummaryResponse {
+  if (!state.store || !state.paths) {
+    throw new Error("Metrics store is not initialized")
+  }
+
+  const summary = state.store.getSummary(filters)
+  const { providers: dataProviders, models: dataModels } = state.store.getFilterOptions(filters)
+
+  const knownProviders = new Set(dataProviders.map((option) => option.value))
+  const catalogProviders = state.store
+    .getCatalogProviders()
+    .filter((value) => !knownProviders.has(value))
+    .map((value) => ({ value, requestCount: 0, totalTokens: 0 }))
+
+  const knownModels = new Set(dataModels.map((option) => option.value))
+  const catalogModels = state.store
+    .getCatalogModels()
+    .filter((value) => !knownModels.has(value))
+    .map((value) => ({ value, requestCount: 0, totalTokens: 0 }))
+
+  return {
+    today: summary,
+    providers: [...dataProviders, ...catalogProviders],
+    models: [...dataModels, ...catalogModels],
     modelProviders: state.store.getModelProviderMap(),
     importErrors: state.importErrors,
     pluginInstalled: isPluginInstalled(),
@@ -396,6 +427,21 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("metrics:get-dashboard-data", (_event, filters: unknown) => {
     return getDashboardData(normalizeDashboardFilters(filters))
+  })
+  ipcMain.handle("metrics:get-summary", (_event, filters: unknown) => {
+    return getSummaryData(normalizeDashboardFilters(filters))
+  })
+  ipcMain.handle("metrics:get-recent", (_event, filters: unknown) => {
+    if (!state.store) throw new Error("Metrics store is not initialized")
+    return state.store.getRecent(normalizeDashboardFilters(filters))
+  })
+  ipcMain.handle("metrics:get-ranking", (_event, filters: unknown) => {
+    if (!state.store) throw new Error("Metrics store is not initialized")
+    return state.store.getRanking(normalizeDashboardFilters(filters))
+  })
+  ipcMain.handle("metrics:get-trends", (_event, filters: unknown) => {
+    if (!state.store) throw new Error("Metrics store is not initialized")
+    return state.store.getTrends(normalizeDashboardFilters(filters))
   })
   ipcMain.handle("plugin:install", () => installGlobalPlugin())
 
