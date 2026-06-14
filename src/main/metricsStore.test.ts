@@ -324,4 +324,20 @@ describe("MetricsStore", () => {
 
     countingStore.close();
   });
+
+  test("getTrends returns trends with valid interval", () => {
+    const metricsStore = createStore();
+    metricsStore.insertEvents(baseEvents);
+
+    const result = metricsStore.getTrends({
+      start: "2026-06-11T00:00:00.000Z",
+      end: "2026-06-12T00:00:00.000Z",
+    });
+
+    expect(result.trendIntervalSeconds).toBe(3600);
+    expect(result.trends).toEqual([
+      { hour: "2026-06-11T00:00:00.000Z", totalTokens: 150, inputTokens: 100, outputTokens: 50, cacheTokens: 0, averageTokensPerSecond: 50 },
+      { hour: "2026-06-11T01:00:00.000Z", totalTokens: 350, inputTokens: 240, outputTokens: 110, cacheTokens: 0, averageTokensPerSecond: 37.5 },
+    ]);
+  });
 });
