@@ -21,12 +21,16 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
 
       - name: Compute next version
         id: version
         run: |
+          git fetch --tags --force
           LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           LATEST_NUM="${LATEST#v}"
           echo "Latest tag: $LATEST"
@@ -55,7 +59,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           sed -i '' "s/\"version\": \".*\"/\"version\": \"${{ steps.version.outputs.version }}\"/" package.json
           git add package.json
-          git commit -m "release: v${{ steps.version.outputs.version }}"
+          git diff --cached --quiet || git commit -m "release: v${{ steps.version.outputs.version }}"
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
           git push origin main
