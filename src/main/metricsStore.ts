@@ -230,15 +230,7 @@ export class MetricsStore {
       [...dashboardFilters.values, pageSize, offset],
     ) as DashboardData["recent"];
 
-    const recentTotalRow = this.database.get(
-      `
-        SELECT COUNT(*) AS total
-        FROM requests
-        ${dashboardFilters.whereClause}
-      `,
-      dashboardFilters.values,
-    ) as { total: number | null | undefined } | undefined;
-    const recentTotal = recentTotalRow?.total ?? 0;
+    const recentTotal = todaySummary.requestCount ?? 0;
 
     const modelRanking = this.database.all(
       `
