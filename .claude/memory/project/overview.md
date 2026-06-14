@@ -76,11 +76,24 @@ value TEXT, provider TEXT, first_seen TEXT
 ## 验证命令
 
 ```bash
-bun run test          # 63 个测试
+bun run test          # 73 个测试
 bun run build         # Vite + tsc + esbuild
+bun run dist          # 构建 + electron-builder 打包 universal dmg/zip
 ```
 
-`bun run build` 会出现 Vite chunk > 500 kB warning（Recharts），不影响构建。
+## 发版流程
+
+1. 功能分支开发 → 合并到 main
+2. 更新 `package.json` 的 `version`
+3. `git tag v0.x.x && git push --tags`
+4. `bun run dist` → 产出 `release/*.dmg` + `release/*.zip`（universal binary）
+5. 上传 dmg 到 GitHub Releases
+
+注意事项：
+- `electron` 必须在 `devDependencies`（electron-builder 要求）
+- 无代码签名（无 Developer ID），用户首次打开需右键"打开"绕过 Gatekeeper
+- 图标在 `build/icon.icns`（从 SVG 通过 Chrome DevTools canvas 渲染 → iconutil 生成）
+- `release/` 已在 `.gitignore`
 
 ## 视觉风格
 
