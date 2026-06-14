@@ -5,9 +5,11 @@ export interface RawMetricEvent {
   model?: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  cacheTokens?: number | null;
   totalTokens?: number | null;
   durationMs?: number | null;
   tokensPerSecond?: number | null;
+  firstTokenLatencyMs?: number | null;
 }
 
 type NumericValue = number | null | undefined;
@@ -19,9 +21,11 @@ export interface MetricEvent {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  cacheTokens: number;
   totalTokens: number;
   durationMs: number;
   tokensPerSecond: number;
+  firstTokenLatencyMs: number | null;
 }
 
 export interface ApiResponse<T> {
@@ -35,6 +39,7 @@ export interface TodaySummary {
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;
+  cacheTokens: number;
   averageTokensPerSecond: number;
 }
 
@@ -45,12 +50,16 @@ export interface ModelRankingRow {
   totalTokens: number;
   inputTokens: number;
   outputTokens: number;
+  cacheTokens: number;
   averageTokensPerSecond: number;
 }
 
 export interface HourlyTrendRow {
   hour: string;
   totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheTokens: number;
   averageTokensPerSecond: number;
 }
 
@@ -59,21 +68,27 @@ export interface DashboardFilters {
   end: string;
   providers?: string[];
   models?: string[];
+  recentPage?: number;
+  recentPageSize?: number;
 }
 
 export interface FilterOption {
   value: string;
   requestCount: number;
   totalTokens: number;
+  providers?: string[];
 }
 
 export interface DashboardData {
   today: TodaySummary;
   recent: MetricEvent[];
+  recentTotal: number;
   modelRanking: ModelRankingRow[];
   hourlyTrends: HourlyTrendRow[];
+  trendIntervalSeconds: number;
   providers: FilterOption[];
   models: FilterOption[];
+  modelProviders?: Record<string, string[]>;
   importErrors?: number;
   pluginInstalled?: boolean;
   paths?: {
@@ -119,7 +134,7 @@ export function formatTokenUnit(value: number): string {
 
   for (const unit of units) {
     if (normalizedValue >= unit.divisor) {
-      return `${(normalizedValue / unit.divisor).toFixed(1).replace(/\.0$/, "")}${unit.suffix}`;
+      return `${(normalizedValue / unit.divisor).toFixed(2).replace(/\.?0+$/, "")}${unit.suffix}`;
     }
   }
 
@@ -139,11 +154,15 @@ export function normalizeMetricEvent(raw: RawMetricEvent): MetricEvent | null {
 
   const inputTokens = normalizeTokenCount(raw.inputTokens);
   const outputTokens = normalizeTokenCount(raw.outputTokens);
+  const cacheTokens = normalizeTokenCount(raw.cacheTokens);
   const derivedTotalTokens = inputTokens + outputTokens;
   const normalizedTotalTokens = normalizeTokenCount(raw.totalTokens);
   const totalTokens =
     normalizedTotalTokens >= derivedTotalTokens ? normalizedTotalTokens : derivedTotalTokens;
   const durationMs = normalizeDuration(raw.durationMs);
+  const firstTokenLatencyMs = typeof raw.firstTokenLatencyMs === "number" && Number.isFinite(raw.firstTokenLatencyMs) && raw.firstTokenLatencyMs > 0
+    ? raw.firstTokenLatencyMs
+    : null;
   const normalizedTokensPerSecond = normalizeRate(raw.tokensPerSecond);
   const tokensPerSecond =
     normalizedTokensPerSecond ?? (durationMs > 0 ? totalTokens / (durationMs / 1000) : 0);
@@ -155,8 +174,10 @@ export function normalizeMetricEvent(raw: RawMetricEvent): MetricEvent | null {
     model: raw.model ?? "unknown",
     inputTokens,
     outputTokens,
+    cacheTokens,
     totalTokens,
     durationMs,
     tokensPerSecond,
+    firstTokenLatencyMs,
   };
 }

@@ -15,6 +15,7 @@ interface MetricEvent {
   totalTokens: number;
   durationMs: number;
   tokensPerSecond: number;
+  firstTokenLatencyMs: number | null;
 }
 
 interface IngestMetadata {

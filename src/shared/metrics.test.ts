@@ -27,9 +27,11 @@ describe("normalizeMetricEvent", () => {
       model: "claude-sonnet-4",
       inputTokens: 120,
       outputTokens: 80,
+      cacheTokens: 0,
       totalTokens: 200,
       durationMs: 5000,
       tokensPerSecond: 40,
+      firstTokenLatencyMs: null,
     });
   });
 
@@ -46,9 +48,11 @@ describe("normalizeMetricEvent", () => {
       model: "unknown",
       inputTokens: 0,
       outputTokens: 0,
+      cacheTokens: 0,
       totalTokens: 0,
       durationMs: 0,
       tokensPerSecond: 0,
+      firstTokenLatencyMs: null,
     });
   });
 
@@ -119,7 +123,7 @@ describe("formatTokenUnit", () => {
     [1000, "1K"],
     [12400, "12.4K"],
     [1000000, "1M"],
-    [3250000, "3.3M"],
+    [3250000, "3.25M"],
     [1000000000, "1B"],
     [1000000000000, "1T"],
   ])("formats %i tokens as %s", (value, expected) => {
