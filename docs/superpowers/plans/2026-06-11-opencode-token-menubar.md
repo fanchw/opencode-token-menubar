@@ -1,5 +1,7 @@
 # OpenCode Token Menubar Implementation Plan
 
+> 状态: ✅ 已完成
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a macOS Electron menubar app that installs an OpenCode token metrics plugin and displays token usage, speed, model ranking, and hourly trends from local data.

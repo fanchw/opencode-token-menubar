@@ -1,7 +1,7 @@
 # 性能优化点
 
 > 审查日期: 2026-06-14
-> 最后更新: 2026-06-14（高优先级 1/2 + 中优先级 5/6 已完成）
+> 最后更新: 2026-06-14（#1-#7/#9/#10 已完成）
 
 按影响程度排序。
 
@@ -52,11 +52,11 @@
 
 `src/renderer/App.tsx`：`chartData`（含 `filledTrends`/`axisLabelOpts` 内聚）已 `useMemo` 化，tooltip hover 不再触发派生数据重算。`chartTicks` 原已 memo。commit `31ab857`。
 
-### 7. 全量刷新无增量更新
+### 7. ✅ 全量刷新无增量更新（已完成）
 
 每次 `metrics:dashboard-updated` 都拉取全部数据（summary + recent 列表 + ranking + trends + options）。高频更新时大部分数据未变。
 
-**方案**：diff-based 增量推送，或拆分 IPC 通道（summary / recent / trends 独立拉取）。
+**完成**：拆分 IPC 通道（`metrics:get-summary` / `metrics:get-recent` / `metrics:get-ranking` / `metrics:get-trends`），renderer 智能刷新策略：summary+recent 每次事件刷新，ranking+trends 每 5 次刷新，filter 变化时全量刷新。
 
 ## 低优先级
 
@@ -66,12 +66,10 @@
 
 **方案**：设阈值（如已消费 > 50% 或文件 > 1MB 才 compact）。
 
-### 9. 模块级全局可变状态
+### 9. ✅ 模块级全局可变状态（已完成）
 
-`src/main/main.ts:15-24`：10 个 `let` 模块变量（tray, window, store, watcher 等），测试困难。
+`src/main/main.ts`：原 11 个 `let` 模块变量，已收敛到单个 `AppState` 对象，统一通过 `state.` 前缀访问。
 
-**方案**：收敛到 AppState 对象或依赖注入。
+### 10. ✅ 趋势 SQL 字符串插值（已完成）
 
-### 10. 趋势 SQL 字符串插值
-
-`src/main/metricsStore.ts:263`：`trendIntervalSeconds` 直接插值到 SQL。当前值来自固定枚举无注入风险，但模式不佳，可用参数化。
+`src/main/metricsStore.ts`：`trendIntervalSeconds` 直接插值到 SQL。已添加 `VALID_TREND_INTERVALS` allowlist 和 `assertValidTrendInterval` 校验函数，确保插值输入受控。SQLite 不支持 GROUP BY 表达式绑定参数，故保留插值 + 校验模式。
