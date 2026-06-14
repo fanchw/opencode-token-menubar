@@ -59,7 +59,11 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           sed -i '' "s/\"version\": \".*\"/\"version\": \"${{ steps.version.outputs.version }}\"/" package.json
           git add package.json
-          git commit -m "release: v${{ steps.version.outputs.version }}"
+          if git diff --cached --quiet; then
+            echo "package.json already at ${{ steps.version.outputs.version }}"
+          else
+            git commit -m "release: v${{ steps.version.outputs.version }}"
+          fi
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
           git push origin main
