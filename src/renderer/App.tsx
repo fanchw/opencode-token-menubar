@@ -35,8 +35,9 @@ export default function App() {
   const inFlightRef = useRef(false)
   const isInstallingRef = useRef(false)
   const latestFiltersRef = useRef<DashboardFilters | null>(null)
-  const debounceTimerRef = useRef<number | null>(null)
-  const updateCountRef = useRef(0)
+  const throttleTimerRef = useRef<number | null>(null)
+  const lastFireRef = useRef(0)
+  const lastHeavyRefreshRef = useRef(0)
 
   const filters = useMemo<DashboardFilters>(() => {
     const range = customRange ?? resolveQuickRange(quickRange, new Date(), timezone)
@@ -76,15 +77,14 @@ export default function App() {
   }, [])
 
   const refreshSummary = useCallback(async (nextFilters: DashboardFilters) => {
-    if (!mountedRef.current || inFlightRef.current) return
+    if (!mountedRef.current) return
 
-    inFlightRef.current = true
     try {
       const [summary, recent] = await Promise.all([
         window.tokenMetrics.getSummary(nextFilters),
         window.tokenMetrics.getRecent(nextFilters),
       ])
-      if (mountedRef.current) {
+      if (mountedRef.current && latestFiltersRef.current === nextFilters) {
         setDashboard((prev) => prev ? {
           ...prev,
           today: summary.today,
@@ -100,11 +100,9 @@ export default function App() {
         setError(null)
       }
     } catch (caughtError) {
-      if (mountedRef.current) {
+      if (mountedRef.current && latestFiltersRef.current === nextFilters) {
         setError(caughtError instanceof Error ? caughtError.message : t("notice.unableLoad"))
       }
-    } finally {
-      inFlightRef.current = false
     }
   }, [])
 
@@ -131,28 +129,40 @@ export default function App() {
 
   useEffect(() => {
     mountedRef.current = true
-    const unsubscribe = window.tokenMetrics.onDashboardUpdated((payload) => {
-      if (debounceTimerRef.current !== null) {
-        window.clearTimeout(debounceTimerRef.current)
+    const throttleMs = 500
+
+    function fireRefresh() {
+      const nextFilters = latestFiltersRef.current
+      if (!nextFilters) return
+
+      void refreshSummary(nextFilters)
+
+      const now = Date.now()
+      if (now - lastHeavyRefreshRef.current >= 2000) {
+        lastHeavyRefreshRef.current = now
+        void refreshHeavy(nextFilters)
       }
-      debounceTimerRef.current = window.setTimeout(() => {
-        debounceTimerRef.current = null
-        const nextFilters = latestFiltersRef.current
-        if (!nextFilters) return
+    }
 
-        updateCountRef.current += 1
-        void refreshSummary(nextFilters)
-
-        if (updateCountRef.current % 5 === 0) {
-          void refreshHeavy(nextFilters)
-        }
-      }, debounceMs)
+    const unsubscribe = window.tokenMetrics.onDashboardUpdated(() => {
+      const now = Date.now()
+      if (now - lastFireRef.current >= throttleMs) {
+        lastFireRef.current = now
+        fireRefresh()
+      } else if (throttleTimerRef.current === null) {
+        const remaining = throttleMs - (now - lastFireRef.current)
+        throttleTimerRef.current = window.setTimeout(() => {
+          throttleTimerRef.current = null
+          lastFireRef.current = Date.now()
+          fireRefresh()
+        }, remaining)
+      }
     })
 
     return () => {
       mountedRef.current = false
-      if (debounceTimerRef.current !== null) {
-        window.clearTimeout(debounceTimerRef.current)
+      if (throttleTimerRef.current !== null) {
+        window.clearTimeout(throttleTimerRef.current)
       }
       unsubscribe()
     }
@@ -160,7 +170,8 @@ export default function App() {
 
   useEffect(() => {
     latestFiltersRef.current = filters
-    updateCountRef.current = 0
+    lastFireRef.current = 0
+    lastHeavyRefreshRef.current = 0
     void refreshDashboard(filters)
   }, [filters, refreshDashboard])
 

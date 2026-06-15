@@ -94,7 +94,7 @@ export function ChartPanel({
               </defs>
               <CartesianGrid stroke="rgba(148, 163, 184, 0.16)" vertical={false} />
               <XAxis type="number" dataKey="ts" domain={["dataMin", "dataMax"]} ticks={chartTicks} axisLine={false} tickLine={false} tickFormatter={(ts) => ts ? formatTimeInZone(new Date(Number(ts)).toISOString(), timezone, axisLabelOpts) : ""} />
-              <YAxis axisLine={false} tickFormatter={(value) => formatTokenUnit(Number(value))} tickLine={false} width={44} />
+              <YAxis axisLine={false} tickFormatter={(value) => formatTokenUnit(Number(value))} tickLine={false} width={52} />
               <Tooltip
                 cursor={{ stroke: "rgba(99, 230, 190, 0.4)", strokeWidth: 1 }}
                 contentStyle={{
