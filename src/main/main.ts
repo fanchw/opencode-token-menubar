@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, screen, Tray } from "electron"
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, nativeTheme, screen, Tray } from "electron"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path, { dirname } from "node:path"
 import chokidar, { type FSWatcher } from "chokidar"
@@ -450,6 +450,11 @@ app.whenReady().then(async () => {
     return state.store.getTrends(normalizeDashboardFilters(filters))
   })
   ipcMain.handle("plugin:install", () => installGlobalPlugin())
+  ipcMain.handle("theme:set-source", (_event, source: unknown) => {
+    if (source === "dark" || source === "light" || source === "system") {
+      nativeTheme.themeSource = source
+    }
+  })
 
   createWindow()
   state.tray = new Tray(createTrayIcon())

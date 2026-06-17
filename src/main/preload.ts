@@ -15,6 +15,7 @@ const tokenMetrics: TokenMetricsApi = {
 
     return () => ipcRenderer.removeListener("metrics:dashboard-updated", listener)
   },
+  setThemeSource: (source) => ipcRenderer.invoke("theme:set-source", source),
 }
 
 contextBridge.exposeInMainWorld("tokenMetrics", tokenMetrics)
