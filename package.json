@@ -20,6 +20,7 @@
   },
   "author": "fcw",
   "dependencies": {
+    "@opencode-ai/sdk": "^1.17.7",
     "chokidar": "^5.0.0",
     "node-sqlite3-wasm": "^0.8.58"
   },
