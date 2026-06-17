@@ -85,6 +85,88 @@
   color-scheme: dark;
 }
 
+[data-theme="light"] {
+  /* 背景层 */
+  --bg-base: #f5f0fa;
+  --bg-panel-solid: #ffffff;
+  --bg-panel: rgba(255, 255, 255, 0.72);
+  --bg-panel-soft: rgba(255, 255, 255, 0.6);
+  --bg-overlay: rgba(40, 30, 60, 0.45);
+  --bg-grid: rgba(176, 38, 255, 0.04);
+
+  /* 文字层 */
+  --text-primary: #2a2540;
+  --text-muted: #6b6584;
+  --text-dim: #9c97b3;
+
+  /* 强调（霓虹）—— 文字场景降饱和度到 Tailwind 600 级 */
+  --neon-cyan: #0891b2;
+  --neon-pink: #db2777;
+  --neon-purple: #9333ea;
+
+  /* Glow */
+  --glow-cyan: 0 0 12px rgba(8, 145, 178, 0.25);
+  --glow-pink: 0 0 12px rgba(219, 39, 119, 0.20);
+
+  /* 交互表面 */
+  --surface-button: rgba(245, 240, 250, 0.8);
+  --surface-input: rgba(236, 228, 245, 0.6);
+  --surface-input-strong: rgba(236, 228, 245, 0.8);
+  --surface-elevated: rgba(236, 228, 245, 0.95);
+
+  /* Hover */
+  --hover-soft: rgba(8, 145, 178, 0.06);
+  --hover-medium: rgba(8, 145, 178, 0.08);
+  --hover-strong: rgba(8, 145, 178, 0.1);
+  --hover-chip: rgba(8, 145, 178, 0.12);
+  --hover-close: rgba(8, 145, 178, 0.15);
+
+  /* 边界 */
+  --divider: rgba(75, 65, 110, 0.1);
+  --divider-strong: rgba(75, 65, 110, 0.18);
+  --divider-cyan: rgba(8, 145, 178, 0.2);
+  --divider-cyan-soft: rgba(8, 145, 178, 0.05);
+
+  /* 边框 */
+  --border-cyan-soft: rgba(8, 145, 178, 0.3);
+  --border-cyan-strong: rgba(8, 145, 178, 0.7);
+  --border-input: rgba(100, 116, 139, 0.42);
+  --border-input-focus: rgba(8, 145, 178, 0.6);
+
+  /* 状态色 */
+  --status-error-text: #b91c1c;
+  --status-error-bg: rgba(254, 226, 226, 0.6);
+  --status-warning-text: #b45309;
+  --status-warning-bg: rgba(254, 243, 199, 0.7);
+  --status-warning-border: rgba(180, 83, 9, 0.4);
+  --status-success-text: #15803d;
+  --status-success-bg: rgba(220, 252, 231, 0.7);
+  --status-success-border: rgba(21, 128, 61, 0.42);
+  --status-missing-text: #b45309;
+
+  /* rank card 文字色（深档） */
+  --rank-gold-strong: #78350f;
+  --rank-silver-strong: #334155;
+  --rank-bronze-strong: #92400e;
+
+  /* 浮层渐变线 */
+  --panel-top-gradient: linear-gradient(90deg, transparent, rgba(8, 145, 178, 0.3), rgba(219, 39, 119, 0.2), transparent);
+
+  /* text-shadow */
+  --text-shadow-cyan-soft: 0 0 6px rgba(8, 145, 178, 0.18);
+  --text-shadow-cyan-medium: 0 0 8px rgba(8, 145, 178, 0.12);
+  --text-shadow-cyan-strong: 0 0 8px rgba(8, 145, 178, 0.18);
+
+  /* shadow */
+  --shadow-panel-inset: 0 1px 0 rgba(0, 0, 0, 0.04) inset;
+  --shadow-modal: 0 0 40px rgba(8, 145, 178, 0.08), 0 24px 60px rgba(40, 30, 60, 0.18);
+  --shadow-tooltip: 0 4px 12px rgba(40, 30, 60, 0.18);
+  --shadow-dropdown: 0 8px 20px rgba(40, 30, 60, 0.2);
+  --shadow-range-modal-tooltip: 0 10px 24px rgba(40, 30, 60, 0.22);
+
+  color-scheme: light;
+}
+
 *,
 *::before,
 *::after {
