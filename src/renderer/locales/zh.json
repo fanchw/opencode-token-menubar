@@ -84,6 +84,10 @@
   "settings.language": "语言",
   "settings.language.en": "English",
   "settings.language.zh": "简体中文",
+  "settings.theme": "主题",
+  "settings.theme.dark": "暗色",
+  "settings.theme.light": "浅色",
+  "settings.theme.system": "跟随系统",
 
   "selectOverlay.clearAll": "清除全部",
   "selectOverlay.done": "完成",

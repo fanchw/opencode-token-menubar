@@ -1,4 +1,5 @@
 import type { DashboardData } from "../../shared/metrics.js"
+import type { ThemeSource } from "../../shared/theme.js"
 import { t, type Locale } from "../i18n.js"
 import { formatNumber } from "../utils.js"
 
@@ -6,8 +7,10 @@ export interface SettingsModalProps {
   dashboard: DashboardData | null
   isInstalling: boolean
   locale: Locale
+  themeSource: ThemeSource
   onInstall: () => void
   onLocaleChange: (locale: Locale) => void
+  onThemeSourceChange: (source: ThemeSource) => void
   onClose: () => void
 }
 
@@ -15,8 +18,10 @@ export function SettingsModal({
   dashboard,
   isInstalling,
   locale,
+  themeSource,
   onInstall,
   onLocaleChange,
+  onThemeSourceChange,
   onClose,
 }: SettingsModalProps) {
   return (
@@ -55,6 +60,14 @@ export function SettingsModal({
           <div className="lang-buttons">
             <button className={locale === "en" ? "active" : ""} onClick={() => onLocaleChange("en")} type="button">{t("settings.language.en")}</button>
             <button className={locale === "zh" ? "active" : ""} onClick={() => onLocaleChange("zh")} type="button">{t("settings.language.zh")}</button>
+          </div>
+        </div>
+        <div className="settings-language">
+          <dt>{t("settings.theme")}</dt>
+          <div className="lang-buttons">
+            <button className={themeSource === "dark" ? "active" : ""} onClick={() => onThemeSourceChange("dark")} type="button">{t("settings.theme.dark")}</button>
+            <button className={themeSource === "light" ? "active" : ""} onClick={() => onThemeSourceChange("light")} type="button">{t("settings.theme.light")}</button>
+            <button className={themeSource === "system" ? "active" : ""} onClick={() => onThemeSourceChange("system")} type="button">{t("settings.theme.system")}</button>
           </div>
         </div>
         <p className="restart-hint">{t("settings.restartHint")}</p>

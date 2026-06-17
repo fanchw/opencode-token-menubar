@@ -4,6 +4,15 @@ import type { DashboardData, DashboardFilters } from "../shared/metrics.js"
 import { formatTimeInZone, resolveQuickRange, validateCustomRange } from "./timeFilters.js"
 import type { QuickRange, TimezoneMode } from "./timeFilters.js"
 import { t, getLocale, setLocale, type Locale } from "./i18n.js"
+import {
+  applyTheme,
+  getSystemDark,
+  getThemeSource,
+  resolveTheme,
+  setThemeSource as persistThemeSource,
+  subscribeSystemTheme,
+} from "./theme.js"
+import type { ThemeSource } from "../shared/theme.js"
 import { debounceMs, emptyChartData, fillEmptyBuckets, formatRangeSummary, toDateTimeLocalValue, toggleSelection } from "./utils.js"
 import { ChartPanel, type ChartPoint } from "./components/ChartPanel.js"
 import { FilterBar } from "./components/FilterBar.js"
@@ -31,6 +40,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [locale, setLocaleState] = useState<Locale>(getLocale())
+  const [themeSource, setThemeSourceState] = useState<ThemeSource>(getThemeSource())
   const mountedRef = useRef(false)
   const inFlightRef = useRef(false)
   const isInstallingRef = useRef(false)
@@ -186,6 +196,11 @@ export default function App() {
     setLocaleState(next)
   }
 
+  function changeThemeSource(next: ThemeSource) {
+    persistThemeSource(next)
+    setThemeSourceState(next)
+  }
+
   function updateCustomRange(nextRange: { start: string; end: string }) {
     const validation = validateCustomRange(nextRange.start, nextRange.end)
     if (!validation.valid) {
@@ -242,6 +257,21 @@ export default function App() {
       document.body.style.overflow = ""
     }
   }, [activeFilterTab])
+
+  useEffect(() => {
+    const resolved = resolveTheme(themeSource, getSystemDark())
+    applyTheme(resolved)
+    void window.tokenMetrics.setThemeSource(themeSource)
+  }, [themeSource])
+
+  useEffect(() => {
+    const unsubscribe = subscribeSystemTheme((systemDark) => {
+      if (getThemeSource() === "system") {
+        applyTheme(resolveTheme("system", systemDark))
+      }
+    })
+    return unsubscribe
+  }, [])
 
   const visibleModelOptions = useMemo(() => {
     const all = dashboard?.models ?? []
@@ -385,8 +415,10 @@ export default function App() {
           dashboard={dashboard}
           isInstalling={isInstalling}
           locale={locale}
+          themeSource={themeSource}
           onInstall={handleInstallPlugin}
           onLocaleChange={changeLocale}
+          onThemeSourceChange={changeThemeSource}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}
