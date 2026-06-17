@@ -14,6 +14,7 @@
 |------|------|
 | `project/overview.md` | 项目总览、数据库表结构、数据流、Filter 系统 |
 | `project/optimization.md` | 性能优化点（10 项，按优先级排序） |
+| `project/opencode-source-ref.md` | OpenCode 源码位置 + 已核实的 API/事件/协议事实（实现时不猜测，先查源码） |
 
 ## 全局标记
 
