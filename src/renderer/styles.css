@@ -1,20 +1,88 @@
 :root {
+  /* 背景层 */
   --bg-base: #0a0410;
-  --bg-panel: rgba(15, 8, 30, 0.55);
   --bg-panel-solid: #0d0820;
-  --neon-cyan: #00f0ff;
-  --neon-pink: #ff2e97;
-  --neon-purple: #b026ff;
+  --bg-panel: rgba(15, 8, 30, 0.55);
+  --bg-panel-soft: rgba(15, 8, 30, 0.4);
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+  --bg-grid: rgba(0, 240, 255, 0.035);
+
+  /* 文字层 */
   --text-primary: #e0e0f0;
   --text-muted: #6b6b8d;
   --text-dim: #4a4a6a;
-  --grid-color: rgba(0, 240, 255, 0.035);
+
+  /* 强调（霓虹） */
+  --neon-cyan: #00f0ff;
+  --neon-pink: #ff2e97;
+  --neon-purple: #b026ff;
+
+  /* Glow */
   --glow-cyan: 0 0 12px rgba(0, 240, 255, 0.15);
   --glow-pink: 0 0 12px rgba(255, 46, 151, 0.15);
-  color: #e0e0f0;
-  background: #0a0410;
+
+  /* 交互表面 */
+  --surface-button: rgba(20, 10, 35, 0.5);
+  --surface-input: rgba(20, 10, 35, 0.4);
+  --surface-input-strong: rgba(20, 10, 35, 0.6);
+  --surface-elevated: rgba(30, 22, 50, 0.95);
+
+  /* Hover 半透明青 */
+  --hover-soft: rgba(0, 240, 255, 0.04);
+  --hover-medium: rgba(0, 240, 255, 0.06);
+  --hover-strong: rgba(0, 240, 255, 0.08);
+  --hover-chip: rgba(0, 240, 255, 0.1);
+  --hover-close: rgba(0, 240, 255, 0.12);
+
+  /* 边界 */
+  --divider: rgba(75, 75, 110, 0.1);
+  --divider-strong: rgba(75, 75, 110, 0.25);
+  --divider-cyan: rgba(0, 240, 255, 0.12);
+  --divider-cyan-soft: rgba(0, 240, 255, 0.03);
+
+  /* 边框 focus */
+  --border-cyan-soft: rgba(0, 240, 255, 0.28);
+  --border-cyan-strong: rgba(0, 240, 255, 0.8);
+  --border-input: rgba(100, 116, 139, 0.38);
+  --border-input-focus: rgba(0, 240, 255, 0.6);
+
+  /* 状态色 */
+  --status-error-text: #fca5a5;
+  --status-error-bg: rgba(69, 10, 10, 0.4);
+  --status-warning-text: #fde68a;
+  --status-warning-bg: rgba(120, 53, 15, 0.18);
+  --status-warning-border: rgba(251, 191, 36, 0.42);
+  --status-success-text: #bbf7d0;
+  --status-success-bg: rgba(20, 83, 45, 0.2);
+  --status-success-border: rgba(34, 197, 94, 0.42);
+  --status-missing-text: #fbbf24;
+
+  /* rank card 文字（强色） */
+  --rank-gold-strong: #fef3c7;
+  --rank-silver-strong: #f1f5f9;
+  --rank-bronze-strong: #fde68a;
+
+  /* 浮层渐变线 */
+  --panel-top-gradient: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.3), rgba(255, 46, 151, 0.2), transparent);
+
+  /* text-shadow 微光 */
+  --text-shadow-cyan-soft: 0 0 6px rgba(0, 240, 255, 0.25);
+  --text-shadow-cyan-medium: 0 0 8px rgba(0, 240, 255, 0.15);
+  --text-shadow-cyan-strong: 0 0 8px rgba(0, 240, 255, 0.2);
+
+  /* shadow */
+  --shadow-panel-inset: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --shadow-modal: 0 0 40px rgba(0, 240, 255, 0.08), 0 24px 60px rgba(0, 0, 0, 0.6);
+  --shadow-tooltip: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-dropdown: 0 8px 20px rgba(0, 0, 0, 0.5);
+  --shadow-range-modal-tooltip: 0 10px 24px rgba(0, 0, 0, 0.5);
+
+  /* 兼容现有直接颜色属性（保留） */
+  color: var(--text-primary);
+  background: var(--bg-base);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 14px;
+  color-scheme: dark;
 }
 
 *,
