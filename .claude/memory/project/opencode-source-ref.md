@@ -2,7 +2,7 @@
 
 ## 源码位置
 
-OpenCode 源码克隆在同级目录：`../opencode`（即 `/Users/fcw/project/js/opencode`）。
+OpenCode 源码克隆在本仓库同级目录 `../opencode`（相对于本仓库根目录）。如未克隆，从 https://github.com/sst/opencode 获取。
 
 ## 实现规则
 
