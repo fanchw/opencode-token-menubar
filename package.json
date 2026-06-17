@@ -49,6 +49,7 @@
       "dist/**/*",
       "assets/**/*",
       "plugin/**/*",
+      "src/shared/pluginMetric.ts",
       "package.json"
     ],
     "mac": {
