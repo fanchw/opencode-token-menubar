@@ -1,3 +1,5 @@
+import type { ThemeSource } from "./theme.js"
+
 export interface RawMetricEvent {
   id?: string | null;
   timestamp?: string | null;
@@ -136,6 +138,7 @@ export interface TokenMetricsApi {
   getTrends(filters: DashboardFilters): Promise<TrendsResponse>;
   installPlugin(): Promise<{ installed: true; targetPath: string }>;
   onDashboardUpdated(callback: (payload: DashboardUpdatePayload) => void): () => void;
+  setThemeSource(source: ThemeSource): Promise<void>;
 }
 
 declare global {
