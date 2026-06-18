@@ -123,7 +123,16 @@ export class Bridge {
     }
 
     const cmd = parseCommand(msg.text);
-    await this.dispatch(msg.chatId, cmd);
+    try {
+      await this.dispatch(msg.chatId, cmd);
+    } catch (e) {
+      console.warn("[bridge] dispatch", e);
+      // OpenCode 不可达或其他错误时，向 IM 反馈（spec 要求）
+      const text = e instanceof Error && /fetch|ECONNREFUSED|connect|network/i.test(e.message)
+        ? "⚠️ OpenCode 未运行"
+        : `❌ ${e instanceof Error ? e.message : "未知错误"}`;
+      await this.adapter.send({ chatId: msg.chatId, kind: "error", text }).catch(() => {});
+    }
   }
 
   private async dispatch(chatId: string, cmd: Command): Promise<void> {

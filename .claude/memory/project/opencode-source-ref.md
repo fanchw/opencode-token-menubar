@@ -33,7 +33,7 @@ OpenCode 源码克隆在本仓库同级目录 `../opencode`（相对于本仓库
 
 | type | 说明 |
 |---|---|
-| `session.status` | 会话状态，`properties.status` = `"busy"` / `"idle"` / `"retry"` |
+| `session.status` | 会话状态，`properties.status` 是对象 `{ type: "busy" / "idle" / "retry" }`（不是字符串） |
 | `message.part.delta` | 流式增量，`properties.delta` 是字符串 |
 | `message.part.updated` | 消息部分更新，`properties.part` 含 `{ type, ... }`（text/tool 等） |
 | `message.updated` / `message.removed` | 消息级事件 |
