@@ -20,7 +20,7 @@ export function readBridgeConfig(configPath: string): BridgeConfig | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const obj = raw as Record<string, unknown>;
   const botToken = obj.telegram && (obj.telegram as Record<string, unknown>).botToken;
-  if (typeof botToken !== "string" || !botToken) return undefined;
+  if (typeof botToken !== "string" || !botToken.trim()) return undefined;
 
   const opencode = (obj.opencode as Record<string, unknown> | undefined) ?? {};
   const baseUrl =

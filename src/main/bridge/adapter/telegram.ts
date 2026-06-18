@@ -42,7 +42,7 @@ export class TelegramAdapter implements IMAdapter {
   private onMessage: ((msg: IncomingMessage) => void) | null = null;
 
   constructor(config: TelegramConfig) {
-    this.baseUrl = `${API_BASE}/${config.botToken}`;
+    this.baseUrl = `${API_BASE}/${config.botToken.trim()}`;
     this.throttleMs = config.throttleMs;
     if (config.proxy) {
       this.dispatcher = new ProxyAgent(config.proxy);
