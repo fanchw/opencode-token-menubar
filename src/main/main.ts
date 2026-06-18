@@ -438,49 +438,49 @@ app.whenReady().then(async () => {
   importNewEvents()
   watchMetricEvents()
 
-  // 远程桥接：读配置，有效才启动
-  if (state.paths) {
+  // 远程桥接：非阻塞启动（不卡 UI），有效配置才启动
+  void (async () => {
+    if (!state.paths) return
     const bridgeConfigPath = process.env.BRIDGE_CONFIG_PATH ?? state.paths.bridgeConfigPath
     const bridgeCfg = readBridgeConfig(bridgeConfigPath)
-    if (bridgeCfg) {
-      try {
-        const tgAdapter = new TelegramAdapter({
-          botToken: bridgeCfg.telegram.botToken,
-          throttleMs: bridgeCfg.throttleMs,
-          // 代理优先级：配置文件 > HTTPS_PROXY 环境变量
-          ...(bridgeCfg.proxy ?? process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY
-            ? { proxy: bridgeCfg.proxy ?? process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY }
-            : {}),
-        })
-        await tgAdapter.verifyToken()
-        await tgAdapter.registerCommands()
+    if (!bridgeCfg) return
+    try {
+      const tgAdapter = new TelegramAdapter({
+        botToken: bridgeCfg.telegram.botToken,
+        throttleMs: bridgeCfg.throttleMs,
+        // 代理优先级：配置文件 > HTTPS_PROXY 环境变量
+        ...(bridgeCfg.proxy ?? process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY
+          ? { proxy: bridgeCfg.proxy ?? process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY }
+          : {}),
+      })
+      await tgAdapter.verifyToken()
+      await tgAdapter.registerCommands()
 
-        // baseUrl 未指定时自动探测运行中的 OpenCode 实例
-        let baseUrl: string = bridgeCfg.opencode.baseUrl ?? ""
-        let password = bridgeCfg.opencode.password
-        if (!baseUrl) {
-          const discovered = await discoverOpenCode()
-          if (discovered) {
-            baseUrl = discovered.url
-            password = discovered.password ?? password
-          } else {
-            baseUrl = "http://localhost:4096"
-          }
+      // baseUrl 未指定时自动探测运行中的 OpenCode 实例
+      let baseUrl: string = bridgeCfg.opencode.baseUrl ?? ""
+      let password = bridgeCfg.opencode.password
+      if (!baseUrl) {
+        const discovered = await discoverOpenCode()
+        if (discovered) {
+          baseUrl = discovered.url
+          password = discovered.password ?? password
+        } else {
+          baseUrl = "http://localhost:4096"
         }
-
-        const proxy = OpenCodeProxy.fromBaseUrl(baseUrl, password)
-        state.bridge = new Bridge(tgAdapter, proxy, {
-          allowlist: bridgeCfg.allowlist,
-          autoApprove: bridgeCfg.autoApprove,
-        })
-        await state.bridge.start()
-        console.log("Bridge started")
-      } catch (error) {
-        console.warn("Failed to start bridge", error)
-        state.bridge = null
       }
+
+      const proxy = OpenCodeProxy.fromBaseUrl(baseUrl, password)
+      state.bridge = new Bridge(tgAdapter, proxy, {
+        allowlist: bridgeCfg.allowlist,
+        autoApprove: bridgeCfg.autoApprove,
+      })
+      await state.bridge.start()
+      console.log("Bridge started")
+    } catch (error) {
+      console.warn("Failed to start bridge", error)
+      state.bridge = null
     }
-  }
+  })()
 
   ipcMain.handle("metrics:get-dashboard-data", (_event, filters: unknown) => {
     return getDashboardData(normalizeDashboardFilters(filters))
