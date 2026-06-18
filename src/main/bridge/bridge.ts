@@ -1,3 +1,7 @@
+import type { IMAdapter, IncomingMessage, OutgoingEvent } from "./adapter/types.js";
+import type { OpenCodeProxy } from "./proxy/opencode.js";
+import { parseCommand, type Command } from "./router.js";
+
 export interface BridgeOptions {
   allowlist?: number[];
   autoApprove?: boolean;
@@ -66,5 +70,166 @@ export class BridgeState {
     this.queueCount.delete(chatId);
     this.busy.delete(chatId);
     return false;
+  }
+}
+
+// Bridge 中枢：串联 adapter/proxy，处理路由
+export class Bridge {
+  private state: BridgeState;
+  private autoApprove: boolean;
+  private stopProxy: (() => void) | null = null;
+
+  constructor(
+    private adapter: IMAdapter,
+    private proxy: OpenCodeProxy,
+    options: BridgeOptions = {},
+  ) {
+    this.state = new BridgeState(options);
+    this.autoApprove = options.autoApprove ?? false;
+  }
+
+  // 暴露给测试的便捷方法
+  bindSession(chatId: string, sessionId: string): void {
+    this.state.bindSession(chatId, sessionId);
+  }
+
+  // 启动：连接 adapter 收消息 + proxy 订阅事件
+  async start(): Promise<void> {
+    await this.adapter.start((msg) => {
+      void this.handleMessage(msg);
+    });
+    // 用 getter 函数实时查询，确保 /new /switch 新绑定后事件不丢
+    this.stopProxy = this.proxy.subscribe(
+      (sessionId) => this.state.getChatId(sessionId),
+      (event) => this.handleProxyEvent(event),
+    );
+  }
+
+  async stop(): Promise<void> {
+    await this.adapter.stop();
+    this.stopProxy?.();
+  }
+
+  // 处理 IM 来的消息
+  async handleMessage(msg: IncomingMessage): Promise<void> {
+    if (!this.state.isAllowed(msg.userId)) return;
+
+    // callback query（权限按钮）
+    if (msg.callbackData) {
+      await this.handleCallback(msg.callbackData);
+      return;
+    }
+
+    const cmd = parseCommand(msg.text);
+    await this.dispatch(msg.chatId, cmd);
+  }
+
+  private async dispatch(chatId: string, cmd: Command): Promise<void> {
+    switch (cmd.kind) {
+      case "new": {
+        const sid = await this.proxy.createSession();
+        this.state.bindSession(chatId, sid);
+        await this.adapter.send({ chatId, kind: "done", text: `✅ 新会话已创建: ${sid}` });
+        return;
+      }
+      case "list": {
+        const list = await this.proxy.listSessions();
+        const text = list.map((s) => `- ${s.id}${s.title ? ` (${s.title})` : ""}`).join("\n") || "（无会话）";
+        await this.adapter.send({ chatId, kind: "done", text });
+        return;
+      }
+      case "switch": {
+        if (!cmd.sessionId) {
+          await this.adapter.send({ chatId, kind: "error", text: "用法: /switch <id>" });
+          return;
+        }
+        this.state.bindSession(chatId, cmd.sessionId);
+        await this.adapter.send({ chatId, kind: "done", text: `✅ 已切换到: ${cmd.sessionId}` });
+        return;
+      }
+      case "abort": {
+        const sid = this.state.getSession(chatId);
+        if (!sid) {
+          await this.adapter.send({ chatId, kind: "error", text: "当前无绑定会话" });
+          return;
+        }
+        await this.proxy.abort(sid);
+        await this.adapter.send({ chatId, kind: "done", text: "⏹ 已中止" });
+        return;
+      }
+      case "status": {
+        const sid = this.state.getSession(chatId);
+        if (!sid) {
+          await this.adapter.send({ chatId, kind: "done", text: "未绑定会话，发 /new 创建" });
+          return;
+        }
+        const info = await this.proxy.getSession(sid);
+        const model = (info as { model?: { id?: string } }).model?.id ?? "unknown";
+        await this.adapter.send({ chatId, kind: "done", text: `会话: ${sid}\n模型: ${model}` });
+        return;
+      }
+      case "help": {
+        await this.adapter.send({
+          chatId,
+          kind: "done",
+          text: "命令: /new /list /switch <id> /abort /status\n普通文本=发 prompt",
+        });
+        return;
+      }
+      case "prompt": {
+        await this.handlePrompt(chatId, cmd.text);
+        return;
+      }
+    }
+  }
+
+  private async handlePrompt(chatId: string, text: string): Promise<void> {
+    let sid = this.state.getSession(chatId);
+    if (!sid) {
+      sid = await this.proxy.createSession();
+      this.state.bindSession(chatId, sid);
+    }
+
+    const pos = this.state.enqueue(chatId);
+    if (pos === -1) {
+      await this.adapter.send({ chatId, kind: "error", text: "⚠️ 队列已满，请稍后" });
+      return;
+    }
+    if (pos !== null) {
+      await this.adapter.send({ chatId, kind: "done", text: `⏳ 已排队（第 ${pos} 位）` });
+      return;
+    }
+    await this.proxy.promptAsync(sid, text);
+  }
+
+  private async handleCallback(data: string): Promise<void> {
+    // 格式: once:sessionId:permissionId / always:... / reject:...
+    const [response, sessionId, permissionId] = data.split(":");
+    if (response !== "once" && response !== "always" && response !== "reject") return;
+    await this.proxy.respondPermission(sessionId, permissionId, response);
+  }
+
+  // 处理 proxy 回流的事件 → 推给 adapter
+  handleProxyEvent(event: OutgoingEvent): void {
+    // autoApprove：权限自动通过（用 always=永久允许，避免同一会话反复弹窗）
+    if (event.kind === "permission" && this.autoApprove) {
+      const sid = event.permissionSessionId;
+      const pid = event.permissionId;
+      if (sid && pid) {
+        void this.proxy.respondPermission(sid, pid, "always");
+        return;
+      }
+    }
+
+    // done 事件：释放排队
+    if (event.kind === "done") {
+      const chatId = event.chatId;
+      const hasNext = this.state.release(chatId);
+      if (hasNext) {
+        void this.adapter.send({ chatId, kind: "done", text: "⏭ 继续下一条排队消息..." });
+      }
+    }
+
+    void this.adapter.send(event);
   }
 }

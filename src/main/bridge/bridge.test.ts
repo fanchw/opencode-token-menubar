@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { BridgeState } from "./bridge.js";
+import { describe, it, expect, vi } from "vitest";
+import type { IMAdapter, IncomingMessage, OutgoingEvent } from "./adapter/types.js";
+import type { OpenCodeProxy } from "./proxy/opencode.js";
+import { BridgeState, Bridge } from "./bridge.js";
 
 describe("BridgeState 会话映射与排队", () => {
   it("bindSession / getSession 基本映射", () => {
@@ -67,5 +69,75 @@ describe("BridgeState 会话映射与排队", () => {
     const next = st.release("chat-1");
     expect(next).toBe(false);
     expect(st.isBusy("chat-1")).toBe(false);
+  });
+});
+
+function makeMocks() {
+  const sent: OutgoingEvent[] = [];
+  const adapter: IMAdapter = {
+    start: vi.fn(),
+    stop: vi.fn(),
+    send: vi.fn(async (e: OutgoingEvent) => {
+      sent.push(e);
+    }),
+  };
+  const proxy: OpenCodeProxy = {
+    createSession: vi.fn().mockResolvedValue("sess-new"),
+    listSessions: vi.fn().mockResolvedValue([{ id: "s1", title: "T1" }]),
+    getSession: vi.fn().mockResolvedValue({ id: "s1", model: { id: "claude" } }),
+    abort: vi.fn().mockResolvedValue(undefined),
+    promptAsync: vi.fn().mockResolvedValue(undefined),
+    respondPermission: vi.fn().mockResolvedValue(undefined),
+    subscribe: vi.fn().mockReturnValue(() => {}),
+  } as unknown as OpenCodeProxy;
+  return { adapter, proxy, sent };
+}
+
+describe("Bridge 路由", () => {
+  it("/new 创建会话并绑定，回复确认", async () => {
+    const { adapter, proxy, sent } = makeMocks();
+    const bridge = new Bridge(adapter, proxy, { autoApprove: false });
+    await bridge.handleMessage({ chatId: "c1", userId: 1, text: "/new" });
+    expect(proxy.createSession).toHaveBeenCalled();
+    expect(sent.some((e) => e.kind === "done" && e.text.includes("sess-new"))).toBe(true);
+  });
+
+  it("普通文本作为 prompt 发送", async () => {
+    const { adapter, proxy } = makeMocks();
+    const bridge = new Bridge(adapter, proxy, {});
+    bridge.bindSession("c1", "s1");
+    await bridge.handleMessage({ chatId: "c1", userId: 1, text: "写测试" });
+    expect(proxy.promptAsync).toHaveBeenCalledWith("s1", "写测试");
+  });
+
+  it("未绑定时发文本自动 /new", async () => {
+    const { adapter, proxy } = makeMocks();
+    const bridge = new Bridge(adapter, proxy, {});
+    await bridge.handleMessage({ chatId: "c1", userId: 1, text: "hello" });
+    expect(proxy.createSession).toHaveBeenCalled();
+  });
+
+  it("/abort 中止当前会话", async () => {
+    const { adapter, proxy } = makeMocks();
+    const bridge = new Bridge(adapter, proxy, {});
+    bridge.bindSession("c1", "s1");
+    await bridge.handleMessage({ chatId: "c1", userId: 1, text: "/abort" });
+    expect(proxy.abort).toHaveBeenCalledWith("s1");
+  });
+
+  it("callback once 调用 respondPermission(once)", async () => {
+    const { adapter, proxy } = makeMocks();
+    const bridge = new Bridge(adapter, proxy, { autoApprove: false });
+    await bridge.handleMessage({ chatId: "c1", userId: 1, text: "", callbackData: "once:s1:p1" });
+    expect(proxy.respondPermission).toHaveBeenCalledWith("s1", "p1", "once");
+  });
+
+  it("autoApprove=true 时自动通过权限(always)", async () => {
+    const { adapter, proxy } = makeMocks();
+    const bridge = new Bridge(adapter, proxy, { autoApprove: true });
+    bridge.bindSession("c1", "s1");
+    bridge.handleProxyEvent({ chatId: "c1", kind: "permission", text: "🔐 bash", permissionId: "p1", permissionSessionId: "s1" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(proxy.respondPermission).toHaveBeenCalledWith("s1", "p1", "always");
   });
 });
