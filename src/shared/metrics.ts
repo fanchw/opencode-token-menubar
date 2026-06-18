@@ -139,6 +139,7 @@ export interface TokenMetricsApi {
   installPlugin(): Promise<{ installed: true; targetPath: string }>;
   onDashboardUpdated(callback: (payload: DashboardUpdatePayload) => void): () => void;
   setThemeSource(source: ThemeSource): Promise<void>;
+  getBridgeStatus(): Promise<{ running: boolean }>;
 }
 
 declare global {

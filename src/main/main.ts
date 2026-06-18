@@ -12,6 +12,10 @@ import { EventBuffer } from "./eventBuffer.js"
 import { formatTokenUnit } from "../shared/metrics.js"
 import type { DashboardData, DashboardFilters, MetricEvent, SummaryResponse, DashboardUpdatePayload } from "../shared/metrics.js"
 import { readOpenCodeModels } from "./opencodeModels.js"
+import { readBridgeConfig } from "./bridge/config.js"
+import { TelegramAdapter } from "./bridge/adapter/telegram.js"
+import { OpenCodeProxy } from "./bridge/proxy/opencode.js"
+import { Bridge } from "./bridge/bridge.js"
 
 interface AppState {
   tray: Tray | null
@@ -21,6 +25,7 @@ interface AppState {
   ingestServer: IngestServerHandle | null
   eventBuffer: EventBuffer | null
   paths: AppPaths | null
+  bridge: Bridge | null
   importStatePath: string | null
   jsonlOffset: number
   importErrors: number
@@ -35,6 +40,7 @@ const state: AppState = {
   ingestServer: null,
   eventBuffer: null,
   paths: null,
+  bridge: null,
   importStatePath: null,
   jsonlOffset: 0,
   importErrors: 0,
@@ -431,6 +437,31 @@ app.whenReady().then(async () => {
   importNewEvents()
   watchMetricEvents()
 
+  // 远程桥接：读配置，有效才启动
+  if (state.paths) {
+    const bridgeCfg = readBridgeConfig(state.paths.bridgeConfigPath)
+    if (bridgeCfg) {
+      try {
+        const tgAdapter = new TelegramAdapter({
+          botToken: bridgeCfg.telegram.botToken,
+          throttleMs: bridgeCfg.throttleMs,
+        })
+        await tgAdapter.verifyToken()
+        await tgAdapter.registerCommands()
+        const proxy = OpenCodeProxy.fromBaseUrl(bridgeCfg.opencode.baseUrl)
+        state.bridge = new Bridge(tgAdapter, proxy, {
+          allowlist: bridgeCfg.allowlist,
+          autoApprove: bridgeCfg.autoApprove,
+        })
+        await state.bridge.start()
+        console.log("Bridge started")
+      } catch (error) {
+        console.warn("Failed to start bridge", error)
+        state.bridge = null
+      }
+    }
+  }
+
   ipcMain.handle("metrics:get-dashboard-data", (_event, filters: unknown) => {
     return getDashboardData(normalizeDashboardFilters(filters))
   })
@@ -455,6 +486,7 @@ app.whenReady().then(async () => {
       nativeTheme.themeSource = source
     }
   })
+  ipcMain.handle("bridge:status", () => ({ running: state.bridge != null }))
 
   createWindow()
   state.tray = new Tray(createTrayIcon())
@@ -495,6 +527,14 @@ app.on("before-quit", (event) => {
         console.warn("Failed to stop ingest server", error)
       } finally {
         state.ingestServer = null
+      }
+
+      try {
+        await state.bridge?.stop()
+      } catch (error) {
+        console.warn("Failed to stop bridge", error)
+      } finally {
+        state.bridge = null
       }
 
       state.eventBuffer?.flush()
