@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { TelegramAdapter } from "./telegram.js";
-import type { IncomingMessage } from "./types.js";
+import type { IncomingMessage, OutgoingEvent } from "./types.js";
 
 // mock global fetch
 function mockFetch(responses: Record<string, unknown>) {
@@ -89,5 +89,59 @@ describe("TelegramAdapter 长轮询收消息", () => {
       { chatId: "555", userId: 1, text: "hi" },
       { chatId: "555", userId: 2, text: "", callbackData: "once:sess-1:perm-1" },
     ]);
+  });
+});
+
+describe("TelegramAdapter send 节流与分段", () => {
+  let originalFetch: typeof globalThis.fetch;
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch as never;
+  });
+
+  it("thinking 事件发占位消息", async () => {
+    const { fn, calls } = mockFetch({ "/sendMessage": { ok: true, result: { message_id: 77 } } });
+    globalThis.fetch = fn as never;
+    const adapter = new TelegramAdapter({ botToken: "t", throttleMs: 50 });
+    await adapter.send({ chatId: "9", kind: "thinking", text: "" });
+    const sm = calls.find((c) => c.url.includes("/sendMessage"));
+    expect(sm).toBeDefined();
+    expect(JSON.parse(sm!.init!.body as string).text).toContain("思考中");
+  });
+
+  it("delta 事件防抖后 editMessageText 同一条消息", async () => {
+    const { fn, calls } = mockFetch({
+      "/sendMessage": { ok: true, result: { message_id: 88 } },
+      "/editMessageText": { ok: true },
+    });
+    globalThis.fetch = fn as never;
+    const adapter = new TelegramAdapter({ botToken: "t", throttleMs: 50 });
+    await adapter.send({ chatId: "9", kind: "thinking", text: "" });
+    await adapter.send({ chatId: "9", kind: "delta", text: "部分1" });
+    await new Promise((r) => setTimeout(r, 80));
+    const edits = calls.filter((c) => c.url.includes("/editMessageText"));
+    expect(edits.length).toBe(1);
+    expect(JSON.parse(edits[0].init!.body as string).message_id).toBe(88);
+  });
+
+  it("done 事件发送最终回复，超 4096 字符自动分段", async () => {
+    const long = "x".repeat(5000);
+    const { fn, calls } = mockFetch({ "/sendMessage": { ok: true, result: { message_id: 1 } } });
+    globalThis.fetch = fn as never;
+    const adapter = new TelegramAdapter({ botToken: "t", throttleMs: 50 });
+    await adapter.send({ chatId: "9", kind: "done", text: long });
+    const msgs = calls.filter((c) => c.url.includes("/sendMessage"));
+    expect(msgs.length).toBe(2);
+  });
+
+  it("error 事件发送错误摘要", async () => {
+    const { fn, calls } = mockFetch({ "/sendMessage": { ok: true, result: { message_id: 1 } } });
+    globalThis.fetch = fn as never;
+    const adapter = new TelegramAdapter({ botToken: "t", throttleMs: 50 });
+    await adapter.send({ chatId: "9", kind: "error", text: "连不上" });
+    const sm = calls.find((c) => c.url.includes("/sendMessage"));
+    expect(JSON.parse(sm!.init!.body as string).text).toContain("连不上");
   });
 });

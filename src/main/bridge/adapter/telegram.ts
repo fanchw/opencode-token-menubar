@@ -28,6 +28,9 @@ export const BOT_COMMANDS = [
   { command: "help", description: "帮助" },
 ];
 
+const TELEGRAM_MSG_LIMIT = 4096;
+const TOOL_RESULT_LIMIT = 500;
+
 export class TelegramAdapter implements IMAdapter {
   private baseUrl: string;
   private throttleMs: number;
@@ -114,7 +117,81 @@ export class TelegramAdapter implements IMAdapter {
     this.onMessage = null;
   }
 
-  async send(_event: OutgoingEvent): Promise<void> {
-    throw new Error("not implemented");
+  // 每个 chatId 的流式状态
+  private streamState = new Map<string, { messageId?: number; buffer: string; editTimer?: ReturnType<typeof setTimeout> }>();
+
+  private async sendText(chatId: string, text: string): Promise<number> {
+    const res = await this.api<{ message_id: number }>("sendMessage", { chat_id: chatId, text });
+    return res.message_id;
+  }
+
+  private async editText(chatId: string, messageId: number, text: string): Promise<void> {
+    await this.api("editMessageText", { chat_id: chatId, message_id: messageId, text }).catch(() => {});
+  }
+
+  private async sendSegmented(chatId: string, text: string): Promise<void> {
+    if (text.length <= TELEGRAM_MSG_LIMIT) {
+      await this.sendText(chatId, text);
+      return;
+    }
+    for (let i = 0; i < text.length; i += TELEGRAM_MSG_LIMIT) {
+      await this.sendText(chatId, text.slice(i, i + TELEGRAM_MSG_LIMIT));
+    }
+  }
+
+  private flushEdit(chatId: string): void {
+    const state = this.streamState.get(chatId);
+    if (!state || state.editTimer == null || state.messageId == null) return;
+    const text = state.buffer || "…";
+    state.editTimer = undefined;
+    void this.editText(chatId, state.messageId, text);
+  }
+
+  async send(event: OutgoingEvent): Promise<void> {
+    const { chatId, kind } = event;
+
+    if (kind === "thinking") {
+      const messageId = await this.sendText(chatId, "🤔 思考中...");
+      this.streamState.set(chatId, { messageId, buffer: "" });
+      return;
+    }
+
+    if (kind === "delta") {
+      const state = this.streamState.get(chatId) ?? { buffer: "" };
+      state.buffer += event.text;
+      this.streamState.set(chatId, state);
+      if (state.messageId != null && state.editTimer == null) {
+        state.editTimer = setTimeout(() => this.flushEdit(chatId), this.throttleMs);
+      }
+      return;
+    }
+
+    if (kind === "tool") {
+      const icon = "🔧";
+      await this.sendText(chatId, `${icon} ${event.toolName ?? ""}${event.text ? `: ${event.text}` : ""}`);
+      return;
+    }
+
+    if (kind === "tool_result") {
+      const ok = event.toolStatus === "error" ? "❌" : "✅";
+      const detail = event.text.length > TOOL_RESULT_LIMIT ? event.text.slice(0, TOOL_RESULT_LIMIT) + "…" : event.text;
+      await this.sendText(chatId, `${ok} ${event.toolName ?? ""}${detail ? `\n${detail}` : ""}`);
+      return;
+    }
+
+    if (kind === "done") {
+      this.flushEdit(chatId);
+      this.streamState.delete(chatId);
+      if (event.text) {
+        await this.sendSegmented(chatId, event.text);
+      }
+      return;
+    }
+
+    if (kind === "error") {
+      this.streamState.delete(chatId);
+      await this.sendText(chatId, `❌ ${event.text}`);
+      return;
+    }
   }
 }
