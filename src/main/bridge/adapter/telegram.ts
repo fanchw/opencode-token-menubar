@@ -1,4 +1,4 @@
-import { ProxyAgent } from "undici";
+import { ProxyAgent, fetch as undiciFetch } from "undici";
 import type { IMAdapter, IncomingMessage, OutgoingEvent } from "./types.js";
 
 export interface TelegramConfig {
@@ -50,17 +50,18 @@ export class TelegramAdapter implements IMAdapter {
   }
 
   private async api<T>(method: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-    const init: RequestInit = {
+    const init: Record<string, unknown> = {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
       signal,
     };
-    // dispatcher 是 Node.js/undici 特有选项，TS 内置 RequestInit 不含此字段
+    // 有代理时用 undici fetch（和 ProxyAgent 版本匹配），无代理用全局 fetch（测试 mock 生效）
+    const fetchFn = this.dispatcher ? undiciFetch : globalThis.fetch;
     if (this.dispatcher) {
-      (init as Record<string, unknown>).dispatcher = this.dispatcher;
+      init.dispatcher = this.dispatcher;
     }
-    const res = await fetch(`${this.baseUrl}/${method}`, init);
+    const res = await fetchFn(`${this.baseUrl}/${method}`, init as never);
     const data = (await res.json()) as TelegramApiResult<T>;
     if (!data.ok) {
       throw new Error(`telegram ${method} failed: ${data.description ?? "unknown"}`);
