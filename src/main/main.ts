@@ -13,6 +13,7 @@ import { formatTokenUnit } from "../shared/metrics.js"
 import type { DashboardData, DashboardFilters, MetricEvent, SummaryResponse, DashboardUpdatePayload } from "../shared/metrics.js"
 import { readOpenCodeModels } from "./opencodeModels.js"
 import { readBridgeConfig } from "./bridge/config.js"
+import { discoverOpenCode } from "./bridge/discovery.js"
 import { TelegramAdapter } from "./bridge/adapter/telegram.js"
 import { OpenCodeProxy } from "./bridge/proxy/opencode.js"
 import { Bridge } from "./bridge/bridge.js"
@@ -439,7 +440,8 @@ app.whenReady().then(async () => {
 
   // 远程桥接：读配置，有效才启动
   if (state.paths) {
-    const bridgeCfg = readBridgeConfig(state.paths.bridgeConfigPath)
+    const bridgeConfigPath = process.env.BRIDGE_CONFIG_PATH ?? state.paths.bridgeConfigPath
+    const bridgeCfg = readBridgeConfig(bridgeConfigPath)
     if (bridgeCfg) {
       try {
         const tgAdapter = new TelegramAdapter({
@@ -448,7 +450,21 @@ app.whenReady().then(async () => {
         })
         await tgAdapter.verifyToken()
         await tgAdapter.registerCommands()
-        const proxy = OpenCodeProxy.fromBaseUrl(bridgeCfg.opencode.baseUrl)
+
+        // baseUrl 未指定时自动探测运行中的 OpenCode 实例
+        let baseUrl: string = bridgeCfg.opencode.baseUrl ?? ""
+        let password = bridgeCfg.opencode.password
+        if (!baseUrl) {
+          const discovered = await discoverOpenCode()
+          if (discovered) {
+            baseUrl = discovered.url
+            password = discovered.password ?? password
+          } else {
+            baseUrl = "http://localhost:4096"
+          }
+        }
+
+        const proxy = OpenCodeProxy.fromBaseUrl(baseUrl, password)
         state.bridge = new Bridge(tgAdapter, proxy, {
           allowlist: bridgeCfg.allowlist,
           autoApprove: bridgeCfg.autoApprove,

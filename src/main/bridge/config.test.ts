@@ -28,7 +28,7 @@ describe("readBridgeConfig", () => {
     const cfg = readBridgeConfig(join(dir, "bridge.json"));
     expect(cfg).toBeDefined();
     expect(cfg!.telegram.botToken).toBe("abc:123");
-    expect(cfg!.opencode.baseUrl).toBe("http://localhost:4096");
+    expect(cfg!.opencode.baseUrl).toBeUndefined();
     expect(cfg!.throttleMs).toBe(1500);
     expect(cfg!.autoApprove).toBe(false);
     expect(cfg!.allowlist).toBeUndefined();

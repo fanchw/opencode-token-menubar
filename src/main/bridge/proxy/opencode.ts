@@ -90,8 +90,13 @@ export function mapOpenCodeEvent(raw: RawOpenCodeEvent, chatId: string): Outgoin
 export class OpenCodeProxy {
   constructor(private client: OpencodeClient) {}
 
-  static fromBaseUrl(baseUrl: string): OpenCodeProxy {
-    return new OpenCodeProxy(createOpencodeClient({ baseUrl, throwOnError: true }));
+  static fromBaseUrl(baseUrl: string, password?: string): OpenCodeProxy {
+    const headers: Record<string, string> = {};
+    if (password) {
+      // OpenCode 用 HTTP Basic Auth，username 默认 "opencode"
+      headers.Authorization = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`;
+    }
+    return new OpenCodeProxy(createOpencodeClient({ baseUrl, throwOnError: true, headers }));
   }
 
   async createSession(): Promise<string> {

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 export interface BridgeConfig {
   telegram: { botToken: string };
-  opencode: { baseUrl: string };
+  opencode: { baseUrl?: string; password?: string };
   allowlist?: number[];
   autoApprove: boolean;
   throttleMs: number;
@@ -23,7 +23,8 @@ export function readBridgeConfig(configPath: string): BridgeConfig | undefined {
 
   const opencode = (obj.opencode as Record<string, unknown> | undefined) ?? {};
   const baseUrl =
-    typeof opencode.baseUrl === "string" ? opencode.baseUrl : "http://localhost:4096";
+    typeof opencode.baseUrl === "string" && opencode.baseUrl ? opencode.baseUrl : undefined;
+  const password = typeof opencode.password === "string" ? opencode.password : undefined;
 
   const allowlist = Array.isArray(obj.allowlist)
     ? obj.allowlist.filter((v): v is number => typeof v === "number")
@@ -31,7 +32,7 @@ export function readBridgeConfig(configPath: string): BridgeConfig | undefined {
 
   return {
     telegram: { botToken },
-    opencode: { baseUrl },
+    opencode: { baseUrl, password },
     allowlist: allowlist && allowlist.length > 0 ? allowlist : undefined,
     autoApprove: obj.autoApprove === true,
     throttleMs:
