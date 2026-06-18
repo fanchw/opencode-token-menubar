@@ -22,7 +22,8 @@
   "dependencies": {
     "@opencode-ai/sdk": "^1.17.7",
     "chokidar": "^5.0.0",
-    "node-sqlite3-wasm": "^0.8.58"
+    "node-sqlite3-wasm": "^0.8.58",
+    "undici": "^8.5.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

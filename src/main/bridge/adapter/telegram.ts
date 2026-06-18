@@ -1,8 +1,10 @@
+import { ProxyAgent } from "undici";
 import type { IMAdapter, IncomingMessage, OutgoingEvent } from "./types.js";
 
 export interface TelegramConfig {
   botToken: string;
   throttleMs: number;
+  proxy?: string;
 }
 
 const API_BASE = "https://api.telegram.org/bot";
@@ -34,6 +36,7 @@ const TOOL_RESULT_LIMIT = 500;
 export class TelegramAdapter implements IMAdapter {
   private baseUrl: string;
   private throttleMs: number;
+  private dispatcher: ProxyAgent | undefined;
   private offset = 0;
   private polling = false;
   private onMessage: ((msg: IncomingMessage) => void) | null = null;
@@ -41,15 +44,23 @@ export class TelegramAdapter implements IMAdapter {
   constructor(config: TelegramConfig) {
     this.baseUrl = `${API_BASE}/${config.botToken}`;
     this.throttleMs = config.throttleMs;
+    if (config.proxy) {
+      this.dispatcher = new ProxyAgent(config.proxy);
+    }
   }
 
   private async api<T>(method: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-    const res = await fetch(`${this.baseUrl}/${method}`, {
+    const init: RequestInit = {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
       signal,
-    });
+    };
+    // dispatcher 是 Node.js/undici 特有选项，TS 内置 RequestInit 不含此字段
+    if (this.dispatcher) {
+      (init as Record<string, unknown>).dispatcher = this.dispatcher;
+    }
+    const res = await fetch(`${this.baseUrl}/${method}`, init);
     const data = (await res.json()) as TelegramApiResult<T>;
     if (!data.ok) {
       throw new Error(`telegram ${method} failed: ${data.description ?? "unknown"}`);

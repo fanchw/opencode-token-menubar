@@ -447,6 +447,10 @@ app.whenReady().then(async () => {
         const tgAdapter = new TelegramAdapter({
           botToken: bridgeCfg.telegram.botToken,
           throttleMs: bridgeCfg.throttleMs,
+          // 代理优先级：配置文件 > HTTPS_PROXY 环境变量
+          ...(bridgeCfg.proxy ?? process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY
+            ? { proxy: bridgeCfg.proxy ?? process.env.HTTPS_PROXY ?? process.env.HTTP_PROXY }
+            : {}),
         })
         await tgAdapter.verifyToken()
         await tgAdapter.registerCommands()

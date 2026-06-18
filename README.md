@@ -91,11 +91,14 @@ The app can act as a remote proxy for OpenCode via a Telegram bot. Send prompts,
        "baseUrl": "http://localhost:4096",  // optional; omit = auto-detect
        "password": "..."                     // optional; for password-protected servers
      },
+     "proxy": "http://127.0.0.1:7890",      // optional; for networks where api.telegram.org is blocked
      "allowlist": [123456789],               // optional; Telegram user IDs, omit = allow all
      "autoApprove": false,                   // optional; true = auto-approve all permissions
      "throttleMs": 1500                      // optional; stream update interval
    }
    ```
+
+   If `proxy` is omitted, the app falls back to the `HTTPS_PROXY` environment variable.
 
    Custom config path via environment variable:
 
