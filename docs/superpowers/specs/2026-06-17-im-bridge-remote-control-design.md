@@ -35,7 +35,7 @@ app 作为 OpenCode 的"远程代理"，内置 OpenCode 官方 Client SDK，把 
 │   └──────┬───────┘            └──────────────┘              └───────┬────────┘
 └──────────┼───────────────────────────────────────────────────┼──────┘
            │                                                   │
-     长轮询 / webhook                              HTTP + WebSocket
+     长轮询 / webhook                              HTTP + SSE
            ▼                                                   ▼
      ┌──────────────┐                               ┌───────────────────┐
      │ Telegram Bot │                               │ 本地 OpenCode 实例 │
@@ -125,7 +125,7 @@ chatId (number) → sessionId (string) + lastActiveAt
 
 `GlobalEvent` 订阅 → `OutgoingEvent` 映射：
 
-Proxy 订阅 WebSocket 事件流，按当前各 chat 绑定的 `sessionId` 过滤，转成 `OutgoingEvent` 丢给 Bridge：
+Proxy 订阅 SSE 事件流（`client.global.event()`，`GET /global/event` Server-Sent Events），按当前各 chat 绑定的 `sessionId` 过滤，转成 `OutgoingEvent` 丢给 Bridge：
 
 | OpenCode 原始事件 | → OutgoingEvent | 说明 |
 |---|---|---|
@@ -202,7 +202,7 @@ bash: rm -rf node_modules
 |---|---|
 | 默认连 `http://localhost:4096` | 配置可覆盖 `baseUrl` |
 | 连不上 | Bridge 状态"未连接"，后台定期重试 |
-| WebSocket 断线 | 指数退避重连（1s→2s→4s…封顶 30s），重连成功后重新订阅事件流 |
+| SSE 断线 | 指数退避重连（1s→2s→4s…封顶 30s），重连成功后重新订阅事件流 |
 | 多个 OpenCode 实例 | 首期只支持单实例（配的哪个 `baseUrl` 就连哪个） |
 
 ## Streaming / Throttle Strategy
