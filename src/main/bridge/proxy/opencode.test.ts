@@ -71,7 +71,7 @@ describe("mapOpenCodeEvent 事件映射", () => {
 
   it("session.status busy 映射为 thinking", () => {
     const out = mapOpenCodeEvent(
-      { type: "session.status", properties: { sessionID: sessionId, status: "busy" } },
+      { type: "session.status", properties: { sessionID: sessionId, status: { type: "busy" } } },
       "chat-1",
     );
     expect(out).toEqual({ chatId: "chat-1", kind: "thinking", text: "", sessionId });
@@ -79,7 +79,7 @@ describe("mapOpenCodeEvent 事件映射", () => {
 
   it("session.status idle 映射为 done", () => {
     const out = mapOpenCodeEvent(
-      { type: "session.status", properties: { sessionID: sessionId, status: "idle" } },
+      { type: "session.status", properties: { sessionID: sessionId, status: { type: "idle" } } },
       "chat-1",
     );
     expect(out).toEqual({ chatId: "chat-1", kind: "done", text: "", sessionId });
@@ -101,9 +101,9 @@ describe("mapOpenCodeEvent 事件映射", () => {
     expect(out).toEqual({ chatId: "chat-1", kind: "delta", text: "完整文本", sessionId });
   });
 
-  it("message.part.updated 带 tool part 无 output 时映射为 tool(start)", () => {
+  it("message.part.updated 带 tool part running 时映射为 tool(start)", () => {
     const out = mapOpenCodeEvent(
-      { type: "message.part.updated", properties: { sessionID: sessionId, part: { type: "tool", tool: "bash", input: { command: "ls" } } } },
+      { type: "message.part.updated", properties: { sessionID: sessionId, part: { type: "tool", tool: "bash", state: { status: "running", input: { command: "ls" } } } } },
       "chat-1",
     );
     expect(out?.kind).toBe("tool");
@@ -112,9 +112,9 @@ describe("mapOpenCodeEvent 事件映射", () => {
     expect(out?.toolStatus).toBe("start");
   });
 
-  it("message.part.updated 带 tool part 有 output 时映射为 tool_result", () => {
+  it("message.part.updated 带 tool part completed 时映射为 tool_result", () => {
     const out = mapOpenCodeEvent(
-      { type: "message.part.updated", properties: { sessionID: sessionId, part: { type: "tool", tool: "bash", output: "file1\nfile2" } } },
+      { type: "message.part.updated", properties: { sessionID: sessionId, part: { type: "tool", tool: "bash", state: { status: "completed", output: "file1\nfile2" } } } },
       "chat-1",
     );
     expect(out?.kind).toBe("tool_result");

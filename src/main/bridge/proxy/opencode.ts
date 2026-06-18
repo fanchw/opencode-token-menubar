@@ -20,12 +20,13 @@ export function mapOpenCodeEvent(raw: RawOpenCodeEvent, chatId: string): Outgoin
 
   switch (raw.type) {
     // 会话状态：busy=开始思考，idle=完成
+    // 源码核实：status 是对象 { type: "busy" | "idle" | "retry" }，不是字符串
     case "session.status": {
-      const status = props.status;
-      if (status === "busy") {
+      const status = props.status as Record<string, unknown> | undefined;
+      if (status?.type === "busy") {
         return { chatId, kind: "thinking", text: "", sessionId };
       }
-      if (status === "idle") {
+      if (status?.type === "idle") {
         return { chatId, kind: "done", text: "", sessionId };
       }
       return null;
@@ -49,17 +50,22 @@ export function mapOpenCodeEvent(raw: RawOpenCodeEvent, chatId: string): Outgoin
       }
 
       if (part.type === "tool") {
-        const toolName = typeof part.tool === "string"
-          ? part.tool
-          : (typeof part.id === "string" ? part.id : "tool");
-        const input = part.input as Record<string, unknown> | undefined;
+        // 源码核实：input/output/error 都在 part.state.*，工具名在 part.tool（顶层）
+        const toolName = typeof part.tool === "string" ? part.tool : "tool";
+        const state = part.state as Record<string, unknown> | undefined;
+        const stateStatus = state?.status;
+        const input = state?.input as Record<string, unknown> | undefined;
         const detail = input && typeof input.command === "string" ? input.command : "";
-        const output = typeof part.output === "string" ? part.output : "";
-        const isError = part.error != null;
-        // 有 output 或 error → tool_result；否则 → tool(start)
-        if (output || isError) {
-          return { chatId, kind: "tool_result", text: output, sessionId, toolName, toolStatus: isError ? "error" : "success" };
+
+        if (stateStatus === "completed") {
+          const output = typeof state?.output === "string" ? state.output : "";
+          return { chatId, kind: "tool_result", text: output, sessionId, toolName, toolStatus: "success" };
         }
+        if (stateStatus === "error") {
+          const errorMsg = typeof state?.error === "string" ? state.error : "";
+          return { chatId, kind: "tool_result", text: errorMsg, sessionId, toolName, toolStatus: "error" };
+        }
+        // pending / running → tool(start)
         return { chatId, kind: "tool", text: detail, sessionId, toolName, toolStatus: "start" };
       }
 
