@@ -9,12 +9,12 @@ export class OpenCodeProxy {
   constructor(private client: OpencodeClient) {}
 
   static fromBaseUrl(baseUrl: string): OpenCodeProxy {
-    return new OpenCodeProxy(createOpencodeClient({ baseUrl }));
+    return new OpenCodeProxy(createOpencodeClient({ baseUrl, throwOnError: true }));
   }
 
   async createSession(): Promise<string> {
-    const res = await this.client.session.create();
-    return res.data!.id;
+    const res = await this.client.session.create({ throwOnError: true });
+    return res.data.id;
   }
 
   async listSessions(): Promise<SessionSummary[]> {
