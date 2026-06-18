@@ -43,11 +43,12 @@ export class TelegramAdapter implements IMAdapter {
     this.throttleMs = config.throttleMs;
   }
 
-  private async api<T>(method: string, body?: unknown): Promise<T> {
+  private async api<T>(method: string, body?: unknown, signal?: AbortSignal): Promise<T> {
     const res = await fetch(`${this.baseUrl}/${method}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
+      signal,
     });
     const data = (await res.json()) as TelegramApiResult<T>;
     if (!data.ok) {
@@ -68,13 +69,20 @@ export class TelegramAdapter implements IMAdapter {
 
   // 单轮长轮询（测试可单独调用）
   async pollOnce(cb: (msg: IncomingMessage) => void): Promise<void> {
-    const updates = await this.api<
-      Array<{
-        update_id: number;
-        message?: { chat: { id: number }; from: { id: number }; text?: string };
-        callback_query?: { from: { id: number }; data?: string; message: { chat: { id: number } } };
-      }>
-    >("getUpdates", { offset: this.offset, timeout: 30 });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 35000);
+    let updates;
+    try {
+      updates = await this.api<
+        Array<{
+          update_id: number;
+          message?: { chat: { id: number }; from: { id: number }; text?: string };
+          callback_query?: { id: string; from: { id: number }; data?: string; message: { chat: { id: number } } };
+        }>
+      >("getUpdates", { offset: this.offset, timeout: 30 }, ctrl.signal);
+    } finally {
+      clearTimeout(timer);
+    }
 
     for (const u of updates) {
       this.offset = u.update_id + 1;
@@ -86,7 +94,7 @@ export class TelegramAdapter implements IMAdapter {
         });
       } else if (u.callback_query) {
         // 应答 callback 避免 loading 转圈
-        await this.api("answerCallbackQuery", { callback_query_id: u.callback_query.from.id }).catch(() => {});
+        await this.api("answerCallbackQuery", { callback_query_id: u.callback_query.id }).catch(() => {});
         cb({
           chatId: String(u.callback_query.message.chat.id),
           userId: u.callback_query.from.id,
@@ -115,6 +123,10 @@ export class TelegramAdapter implements IMAdapter {
   async stop(): Promise<void> {
     this.polling = false;
     this.onMessage = null;
+    for (const state of this.streamState.values()) {
+      if (state.editTimer) clearTimeout(state.editTimer);
+    }
+    this.streamState.clear();
   }
 
   // 每个 chatId 的流式状态
@@ -181,6 +193,12 @@ export class TelegramAdapter implements IMAdapter {
 
     if (kind === "done") {
       this.flushEdit(chatId);
+      const state = this.streamState.get(chatId);
+      if (state?.editTimer) clearTimeout(state.editTimer);
+      // 兜底：如果 buffer 非空但从未发过占位消息（messageId 为 null），直接 sendText
+      if (state && state.buffer && state.messageId == null) {
+        await this.sendSegmented(chatId, state.buffer);
+      }
       this.streamState.delete(chatId);
       if (event.text) {
         await this.sendSegmented(chatId, event.text);
@@ -208,6 +226,8 @@ export class TelegramAdapter implements IMAdapter {
     }
 
     if (kind === "error") {
+      const state = this.streamState.get(chatId);
+      if (state?.editTimer) clearTimeout(state.editTimer);
       this.streamState.delete(chatId);
       await this.sendText(chatId, `❌ ${event.text}`);
       return;

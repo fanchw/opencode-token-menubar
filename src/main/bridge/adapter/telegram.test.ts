@@ -72,11 +72,11 @@ describe("TelegramAdapter 长轮询收消息", () => {
         { update_id: 100, message: { chat: { id: 555 }, from: { id: 1 }, text: "hi" } },
         {
           update_id: 101,
-          callback_query: { from: { id: 2 }, data: "once:sess-1:perm-1", message: { chat: { id: 555 } } },
+          callback_query: { id: "cq-1", from: { id: 2 }, data: "once:sess-1:perm-1", message: { chat: { id: 555 } } },
         },
       ],
     };
-    const { fn } = mockFetch({ "/getUpdates": updates, "/answerCallbackQuery": { ok: true } });
+    const { fn, calls } = mockFetch({ "/getUpdates": updates, "/answerCallbackQuery": { ok: true } });
     globalThis.fetch = fn as never;
 
     const adapter = new TelegramAdapter({ botToken: "t", throttleMs: 1500 });
@@ -89,6 +89,11 @@ describe("TelegramAdapter 长轮询收消息", () => {
       { chatId: "555", userId: 1, text: "hi" },
       { chatId: "555", userId: 2, text: "", callbackData: "once:sess-1:perm-1" },
     ]);
+
+    // 验证 answerCallbackQuery 收到了正确的 callback_query_id
+    const acq = calls.find((c) => c.url.includes("/answerCallbackQuery"));
+    expect(acq).toBeDefined();
+    expect(JSON.parse(acq!.init!.body as string).callback_query_id).toBe("cq-1");
   });
 });
 
