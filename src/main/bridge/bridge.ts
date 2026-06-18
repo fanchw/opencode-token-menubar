@@ -14,7 +14,7 @@ export class BridgeState {
   private sessionToChat = new Map<string, string>();
   private allowlist?: number[];
   private maxQueue: number;
-  private queueCount = new Map<string, number>();
+  private promptQueue = new Map<string, string[]>();
   private busy = new Set<string>();
 
   constructor(options: BridgeOptions = {}) {
@@ -42,17 +42,18 @@ export class BridgeState {
     return this.allowlist.includes(userId);
   }
 
-  // 返回 null=直接执行，数字=排队位置（即总并发序号），-1=队列满
+  // 返回 null=直接执行（调用方负责发 prompt），数字=排队位置，-1=队列满
   // maxQueue 语义：最大并发总数（busy + 排队），position 即任务总数序号
-  enqueue(chatId: string): number | null {
+  enqueue(chatId: string, text: string): number | null {
     if (!this.busy.has(chatId)) {
       this.busy.add(chatId);
       return null;
     }
-    const count = this.queueCount.get(chatId) ?? 0;
-    const position = count + 2;
+    const queue = this.promptQueue.get(chatId) ?? [];
+    const position = queue.length + 2;
     if (position > this.maxQueue) return -1;
-    this.queueCount.set(chatId, count + 1);
+    queue.push(text);
+    this.promptQueue.set(chatId, queue);
     return position;
   }
 
@@ -60,16 +61,17 @@ export class BridgeState {
     return this.busy.has(chatId);
   }
 
-  // 释放当前任务，返回 true=队列里还有下一个要执行
-  release(chatId: string): boolean {
-    const count = this.queueCount.get(chatId) ?? 0;
-    if (count > 0) {
-      this.queueCount.set(chatId, count - 1);
-      return true;
+  // 释放当前任务，返回下一条 prompt 文本（null=队列空，释放 busy）
+  release(chatId: string): string | null {
+    const queue = this.promptQueue.get(chatId);
+    if (queue && queue.length > 0) {
+      const next = queue.shift()!;
+      if (queue.length === 0) this.promptQueue.delete(chatId);
+      return next;
     }
-    this.queueCount.delete(chatId);
+    this.promptQueue.delete(chatId);
     this.busy.delete(chatId);
-    return false;
+    return null;
   }
 }
 
@@ -96,7 +98,7 @@ export class Bridge {
   // 启动：连接 adapter 收消息 + proxy 订阅事件
   async start(): Promise<void> {
     await this.adapter.start((msg) => {
-      void this.handleMessage(msg);
+      void this.handleMessage(msg).catch((e) => console.warn("[bridge] handleMessage", e));
     });
     // 用 getter 函数实时查询，确保 /new /switch 新绑定后事件不丢
     this.stopProxy = this.proxy.subscribe(
@@ -190,7 +192,7 @@ export class Bridge {
       this.state.bindSession(chatId, sid);
     }
 
-    const pos = this.state.enqueue(chatId);
+    const pos = this.state.enqueue(chatId, text);
     if (pos === -1) {
       await this.adapter.send({ chatId, kind: "error", text: "⚠️ 队列已满，请稍后" });
       return;
@@ -216,20 +218,27 @@ export class Bridge {
       const sid = event.permissionSessionId;
       const pid = event.permissionId;
       if (sid && pid) {
-        void this.proxy.respondPermission(sid, pid, "always");
+        void this.proxy.respondPermission(sid, pid, "always").catch((e) =>
+          console.warn("[bridge] respondPermission", e),
+        );
         return;
       }
     }
 
-    // done 事件：释放排队
+    // done 事件：释放排队，若有下一条则自动提交
     if (event.kind === "done") {
       const chatId = event.chatId;
-      const hasNext = this.state.release(chatId);
-      if (hasNext) {
-        void this.adapter.send({ chatId, kind: "done", text: "⏭ 继续下一条排队消息..." });
+      const nextPrompt = this.state.release(chatId);
+      if (nextPrompt !== null) {
+        const sid = this.state.getSession(chatId);
+        if (sid) {
+          void this.proxy.promptAsync(sid, nextPrompt).catch((e) =>
+            console.warn("[bridge] queue prompt failed", e),
+          );
+        }
       }
     }
 
-    void this.adapter.send(event);
+    void this.adapter.send(event).catch((e) => console.warn("[bridge] send", e));
   }
 }

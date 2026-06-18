@@ -34,40 +34,40 @@ describe("BridgeState 会话映射与排队", () => {
   it("enqueue 在空闲时返回 null（无需排队）", () => {
     const st = new BridgeState();
     st.bindSession("chat-1", "sess-1");
-    expect(st.enqueue("chat-1")).toBeNull();
+    expect(st.enqueue("chat-1", "test")).toBeNull();
     expect(st.isBusy("chat-1")).toBe(true);
   });
 
   it("enqueue 在忙碌时返回排队位置", () => {
     const st = new BridgeState();
     st.bindSession("chat-1", "sess-1");
-    st.enqueue("chat-1");
-    expect(st.enqueue("chat-1")).toBe(2);
+    st.enqueue("chat-1", "test");
+    expect(st.enqueue("chat-1", "test2")).toBe(2);
   });
 
   it("enqueue 超过上限返回 -1", () => {
     const st = new BridgeState({ maxQueue: 2 });
     st.bindSession("chat-1", "sess-1");
-    st.enqueue("chat-1");
-    st.enqueue("chat-1");
-    expect(st.enqueue("chat-1")).toBe(-1);
+    st.enqueue("chat-1", "a");
+    st.enqueue("chat-1", "b");
+    expect(st.enqueue("chat-1", "c")).toBe(-1);
   });
 
-  it("release 取出队列下一个并返回是否有后续", () => {
+  it("release 取出队列下一个并返回下一条 prompt 文本", () => {
     const st = new BridgeState();
     st.bindSession("chat-1", "sess-1");
-    st.enqueue("chat-1");
-    st.enqueue("chat-1");
+    st.enqueue("chat-1", "test");
+    st.enqueue("chat-1", "test2");
     const next = st.release("chat-1");
-    expect(next).toBe(true);
+    expect(next).toBe("test2");
   });
 
   it("release 无后续时释放 busy 状态", () => {
     const st = new BridgeState();
     st.bindSession("chat-1", "sess-1");
-    st.enqueue("chat-1");
+    st.enqueue("chat-1", "test");
     const next = st.release("chat-1");
-    expect(next).toBe(false);
+    expect(next).toBeNull();
     expect(st.isBusy("chat-1")).toBe(false);
   });
 });
