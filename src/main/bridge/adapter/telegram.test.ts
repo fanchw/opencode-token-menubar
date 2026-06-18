@@ -145,3 +145,35 @@ describe("TelegramAdapter send 节流与分段", () => {
     expect(JSON.parse(sm!.init!.body as string).text).toContain("连不上");
   });
 });
+
+describe("TelegramAdapter 权限按钮", () => {
+  let originalFetch: typeof globalThis.fetch;
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+  afterEach(() => {
+    globalThis.fetch = originalFetch as never;
+  });
+
+  it("permission 事件发送带 inline keyboard 的消息", async () => {
+    const { fn, calls } = mockFetch({ "/sendMessage": { ok: true, result: { message_id: 1 } } });
+    globalThis.fetch = fn as never;
+    const adapter = new TelegramAdapter({ botToken: "t", throttleMs: 50 });
+    await adapter.send({
+      chatId: "9",
+      kind: "permission",
+      text: "🔐 bash: rm -rf x",
+      permissionId: "perm-1",
+      permissionSessionId: "sess-1",
+    });
+    const sm = calls.find((c) => c.url.includes("/sendMessage"));
+    const body = JSON.parse(sm!.init!.body as string);
+    expect(body.reply_markup.inline_keyboard).toEqual([
+      [
+        { text: "✅ 本次", callback_data: "once:sess-1:perm-1" },
+        { text: "🔁 永久", callback_data: "always:sess-1:perm-1" },
+        { text: "❌ 拒绝", callback_data: "reject:sess-1:perm-1" },
+      ],
+    ]);
+  });
+});

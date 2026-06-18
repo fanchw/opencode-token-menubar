@@ -188,6 +188,25 @@ export class TelegramAdapter implements IMAdapter {
       return;
     }
 
+    if (kind === "permission") {
+      const sid = event.permissionSessionId ?? "";
+      const pid = event.permissionId ?? "";
+      await this.api("sendMessage", {
+        chat_id: chatId,
+        text: event.text,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "✅ 本次", callback_data: `once:${sid}:${pid}` },
+              { text: "🔁 永久", callback_data: `always:${sid}:${pid}` },
+              { text: "❌ 拒绝", callback_data: `reject:${sid}:${pid}` },
+            ],
+          ],
+        },
+      });
+      return;
+    }
+
     if (kind === "error") {
       this.streamState.delete(chatId);
       await this.sendText(chatId, `❌ ${event.text}`);
